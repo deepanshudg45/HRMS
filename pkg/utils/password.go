@@ -3,7 +3,7 @@ package utils
 import "golang.org/x/crypto/bcrypt"
 
 func HashPassword(pw string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(pw),12 /*bcrypt.DefaultCost*/)
 	return string(hash), err
 }
 
