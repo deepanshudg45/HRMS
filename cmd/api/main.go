@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
+	"os"
+
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"github.com/wil/hrms/pkg/db"
 	"github.com/wil/hrms/pkg/middleware"
+	"go.uber.org/zap"
 )
 
 func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
+
+	connStr := os.Getenv("DATABASE_URL")
+	db.InitDB(connStr)
 
 	r := gin.Default()
 
@@ -21,7 +27,7 @@ func main() {
 	})
 	// db connection
 	r.GET("/api/v1/health", func(c *gin.Context) {
-	err := db.GetPool().Ping(c)
+	err := db.GetPool().Ping(context.Background())
 
 	if err != nil {
 		c.JSON(500, gin.H{

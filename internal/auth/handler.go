@@ -2,7 +2,6 @@
 package auth
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
