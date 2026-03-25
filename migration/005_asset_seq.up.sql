@@ -1,0 +1,1 @@
+CREATE SEQUENCE asset_code_seq START 1;
