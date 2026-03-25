@@ -7,8 +7,8 @@ import (
 )
 
 func AssetRoutes(app *fiber.App, handler *handler.AssetHandler) {
-    api := app.Group("/api/v1")
+    api := app.Group("/api/assets")
 
     assets := api.Group("/assets")
-    assets.Post("/aa", handler.CreateAsset)
+    assets.Post("", handler.CreateAsset)
 }
