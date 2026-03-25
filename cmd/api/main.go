@@ -1,47 +1,44 @@
 package main
 
 import (
-	"context"
+	// "fmt"
 	"os"
-
-	"github.com/gin-gonic/gin"
-	"github.com/wil/hrms/pkg/db"
-	"github.com/wil/hrms/pkg/middleware"
+	"github.com/gofiber/fiber/v2"
+	"hrms-1/pkg/db"
+	// "hrms-1/pkg/middleware"
+	"hrms-1/internal/routes"
 	"go.uber.org/zap"
+	"hrms-1/pkg/config"
 )
 
 func main() {
+	config.LoadEnv()
+
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
 	connStr := os.Getenv("DATABASE_URL")
 	db.InitDB(connStr)
 
-	r := gin.Default()
+	err := db.RunMigrations(db.GetPool())
+	if err != nil {
+		panic(err)
+	}
+	// fmt.Println("DB URL:", connStr)
+
+
+	app :=fiber.New()
+	routes.AssetsRoutes(app)
 
 	// Global middleware
-	r.Use(middleware.ErrorHandler())
+	// app.Use(middleware.ErrorHandler())
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-	// db connection
-	r.GET("/api/v1/health", func(c *gin.Context) {
-	err := db.GetPool().Ping(context.Background())
-
-	if err != nil {
-		c.JSON(500, gin.H{
-			"status": "DOWN",
-			"db":     "not reachable",
-		})
-		return
-	}
-
-	c.JSON(200, gin.H{
-		"status": "UP",
-		"db":     "connected",
+	app.Get("/health", func(c *fiber.Ctx) error {
+	return c.Status(200).JSON(fiber.Map{
+		"status": "ok",
 	})
 })
-	logger.Info("Server started on :8080")
-	r.Run(":8080")
+	
+	logger.Info("Server started on :8000")
+	app.Listen(":8000")
 }

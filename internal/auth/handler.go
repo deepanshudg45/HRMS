@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/wil/hrms/pkg/utils"
+	"hrms-1/pkg/utils"
 )
 
 type Handler struct {

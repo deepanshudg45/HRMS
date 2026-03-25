@@ -1,25 +1,27 @@
 package assets
 
-import( "github.com/gin-gonic/gin"
+import( 
+	"github.com/gofiber/fiber/v2"
 	"fmt"
 	"strconv"
 	"strings"
+	"context"
 )
 type Handler struct {
 	Service *Service
 	Repo    *Repository
 }
 
-func (h *Handler) GetAssets(c *gin.Context) {
-	ctx := c.Request.Context()
+func (h *Handler) GetAssets(c *fiber.Ctx) error {
+	ctx := context.Background() 
 
 	status := c.Query("status")
 	atype := c.Query("type")
 	category := c.Query("category")
 	search := c.Query("search")
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 	offset := (page - 1) * limit
 
 	query := `SELECT id, asset_code, name, serial_no, asset_type, category, status 
@@ -59,16 +61,21 @@ func (h *Handler) GetAssets(c *gin.Context) {
 
 	rows, err := h.Repo.DB.Query(ctx, query, args...)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 	defer rows.Close()
 
 	var list []AssetListDTO
-
+	fmt.Println("Handler DB:", h.Repo.DB)
 	for rows.Next() {
 		var a AssetListDTO
-		rows.Scan(&a.ID, &a.Code, &a.Name, &a.SerialNo, &a.Type, &a.Category, &a.Status)
+		if err := rows.Scan(&a.ID, &a.Code, &a.Name, &a.SerialNo, &a.Type, &a.Category, &a.Status); err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
 		list = append(list, a)
 	}
 
@@ -79,12 +86,17 @@ func (h *Handler) GetAssets(c *gin.Context) {
 	}
 
 	var total int
-	h.Repo.DB.QueryRow(ctx, countQ, args[:len(args)-2]...).Scan(&total)
+	err = h.Repo.DB.QueryRow(ctx, countQ, args[:len(args)-2]...).Scan(&total)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
-	c.JSON(200, gin.H{
+	return c.JSON(fiber.Map{
 		"success": true,
 		"data":    list,
-		"meta": gin.H{
+		"meta": fiber.Map{
 			"page":  page,
 			"limit": limit,
 			"total": total,

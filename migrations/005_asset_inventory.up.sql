@@ -1,19 +1,42 @@
 -- ENUMS
-CREATE TYPE asset_type AS ENUM ('HARDWARE','SOFTWARE','FURNITURE','OTHER');
+-- asset_type
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'asset_type'
+    ) THEN
+        CREATE TYPE asset_type AS ENUM (
+            'HARDWARE','SOFTWARE','FURNITURE','OTHER'
+        );
+    END IF;
+END$$;
 
-CREATE TYPE asset_status AS ENUM (
-  'AVAILABLE','ASSIGNED','UNDER_REPAIR','RETIRED','LOST'
-);
+-- asset_status
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'asset_status'
+    ) THEN
+        CREATE TYPE asset_status AS ENUM (
+            'AVAILABLE','ASSIGNED','UNDER_REPAIR','RETIRED','LOST'
+        );
+    END IF;
+END$$;
 
-CREATE TYPE asset_category AS ENUM (
-  'LAPTOP','MOBILE','DESKTOP','CHAIR','TABLE','OTHER'
-);
-
--- SEQUENCE
-CREATE SEQUENCE asset_code_seq START 1;
-
+-- asset_category
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'asset_category'
+    ) THEN
+        CREATE TYPE asset_category AS ENUM (
+            'LAPTOP','MOBILE','DESKTOP','CHAIR','TABLE','OTHER'
+        );
+    END IF;
+END$$;
+CREATE SEQUENCE IF NOT EXISTS asset_code_seq START 1;
 -- TABLE
-CREATE TABLE asset_inventory (
+CREATE TABLE IF NOT EXISTS asset_inventory (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   asset_code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -26,10 +49,10 @@ CREATE TABLE asset_inventory (
 );
 
 -- UNIQUE NULLS NOT DISTINCT
-CREATE UNIQUE INDEX ux_asset_serial_no
+CREATE UNIQUE INDEX IF NOT EXISTS ux_asset_serial_no
 ON asset_inventory(serial_no)
 WHERE serial_no IS NOT NULL;
 
 -- INDEX
-CREATE INDEX idx_asset_filters
+CREATE INDEX IF NOT EXISTS idx_asset_filters
 ON asset_inventory(status, asset_type, is_deleted);
