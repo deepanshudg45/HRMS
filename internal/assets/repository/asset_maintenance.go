@@ -1,9 +1,11 @@
 package repository
 
 import (
-    "context"
+	"context"
 
-    "WITS/internal/assets/model"
+	"WITS/internal/assets/model"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Row interface {
@@ -12,15 +14,16 @@ type Row interface {
 
 type DB interface {
     Exec(ctx context.Context, sql string, arguments ...any) (any, error)
+    Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error)
     QueryRow(ctx context.Context, sql string, arguments ...any) interface{ Scan(dest ...any) error }
 }
 
 type Repository struct {
-    db DB
+    DB DB
 }
 
 func NewRepository(db DB) *Repository {
-    return &Repository{db: db}
+    return &Repository{DB: db}
 }
 
 func (r *Repository) CreateAsset(ctx context.Context, asset model.Asset) error {
@@ -29,10 +32,10 @@ func (r *Repository) CreateAsset(ctx context.Context, asset model.Asset) error {
         (
             asset_code,
             asset_type,
-            asset_name,
+            name,
             brand,
             model,
-            asset_category,
+            category,
             serial_no,
             purchase_date,
             purchase_cost_inr,
@@ -44,7 +47,7 @@ func (r *Repository) CreateAsset(ctx context.Context, asset model.Asset) error {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     `
 
-    _, err := r.db.Exec(ctx, query,
+    _, err := r.DB.Exec(ctx, query,
         asset.AssetCode,
         asset.AssetType,
         asset.AssetName,
@@ -68,7 +71,7 @@ func (r *Repository) NextAssetSeq(ctx context.Context) (int64, error) {
 
     query := `SELECT nextval('asset_code_seq')`
 
-    err := r.db.QueryRow(ctx, query).Scan(&seq)
+    err := r.DB.QueryRow(ctx, query).Scan(&seq)
     if err != nil {
         return 0, err
     }

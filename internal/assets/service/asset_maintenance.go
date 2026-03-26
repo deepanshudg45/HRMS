@@ -1,13 +1,13 @@
 package service
 
 import (
-    "context"
-    "errors"
-    "fmt"
-    "strings"
-    "time"
+	"context"
+	"errors"
+	"strings"
+	"time"
 
-    "WITS/internal/assets/model"
+	"WITS/internal/assets/model"
+	"WITS/package/utils"
 )
 
 var (
@@ -18,6 +18,7 @@ var (
 type AssetRepository interface {
     NextAssetSeq(ctx context.Context) (int64, error)
     CreateAsset(ctx context.Context, asset model.Asset) error
+    GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error)
 }
 
 type AssetService struct {
@@ -61,9 +62,8 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
         return nil, err
     }
 
-    // assetCode := fmt.Sprintf("AST-2026-%04d", seq)
     year := time.Now().Year()
-    assetCode := fmt.Sprintf("AST-%d-%04d", year, seq)
+    assetCode := utils.AssetCodeGen(year, int(seq))
 
     asset := model.Asset{
         AssetCode:       assetCode,
@@ -92,4 +92,9 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
         AssetType: req.AssetType,
         Status:    "CREATED",
     }, nil
+}
+
+// GetAssets retrieves assets with filters and pagination
+func (s *AssetService) GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error) {
+    return s.repo.GetAssets(ctx, filters)
 }
