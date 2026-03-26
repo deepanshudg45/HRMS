@@ -5,7 +5,7 @@ BEGIN
         SELECT 1 FROM pg_type WHERE typname = 'asset_type'
     ) THEN
         CREATE TYPE asset_type AS ENUM (
-            'HARDWARE','SOFTWARE','FURNITURE','OTHER'
+            'LAPTOP','MOBILE','DESKTOP','FURNITURE','OTHER'
         );
     END IF;
 END$$;
@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS asset_inventory (
   asset_type asset_type NOT NULL,
   category asset_category,
   status asset_status DEFAULT 'AVAILABLE',
+  brand TEXT,
+  model TEXT,
+  purchase_date DATE,
+  purchase_cost_inr NUMERIC(12,2),
+  vendor VARCHAR(200),
+  warranty_expiry DATE,
+  location TEXT,
+  notes TEXT,
   is_deleted BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW()
 );

@@ -1,19 +1,33 @@
 -- ENUMS
-CREATE TYPE maintenance_type AS ENUM (
-    'REPAIR',
-    'SERVICE',
-    'INSPECTION',
-    'DISPOSAL'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'maintenance_type'
+    ) THEN
+        CREATE TYPE maintenance_type AS ENUM (
+            'REPAIR',
+            'SERVICE',
+            'INSPECTION',
+            'DISPOSAL'
+        );
+    END IF;
+END$$;
 
-CREATE TYPE maint_status AS ENUM (
-    'IN_PROGRESS',
-    'COMPLETED',
-    'SCRAPPED'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'maint_status'
+    ) THEN
+        CREATE TYPE maint_status AS ENUM (
+            'IN_PROGRESS',
+            'COMPLETED',
+            'SCRAPPED'
+        );
+    END IF;
+END$$;
 
 -- TABLE
-CREATE TABLE asset_maintenance_logs (
+CREATE TABLE IF NOT EXISTS asset_maintenance_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     asset_id UUID NOT NULL REFERENCES asset_inventory(id),
@@ -34,5 +48,5 @@ CREATE TABLE asset_maintenance_logs (
 );
 
 -- INDEX
-CREATE INDEX idx_asset_maintenance 
+CREATE INDEX IF NOT EXISTS idx_asset_maintenance 
 ON asset_maintenance_logs (asset_id, maint_status, created_at);

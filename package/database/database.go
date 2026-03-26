@@ -1,12 +1,13 @@
 package database
 
 import (
-    "context"
-    "errors"
+	"context"
+	"errors"
 
-    "WITS/config"
+	"WITS/config"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
 )
 
 type Client struct {
@@ -33,6 +34,10 @@ func Connect(cfg config.Config) (*Client, error) {
 
 func (c *Client) Exec(ctx context.Context, sql string, arguments ...any) (any, error) {
     return c.pool.Exec(ctx, sql, arguments...)
+}
+
+func (c *Client) Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error) {
+    return c.pool.Query(ctx, sql, arguments...)
 }
 
 func (c *Client) QueryRow(ctx context.Context, sql string, arguments ...any) interface{ Scan(dest ...any) error } {
