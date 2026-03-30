@@ -1,1 +1,1 @@
-CREATE SEQUENCE asset_code_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS asset_code_seq START 1;
