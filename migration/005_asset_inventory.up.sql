@@ -1,4 +1,6 @@
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 DO $$
 BEGIN
     IF NOT EXISTS (

@@ -24,3 +24,8 @@ type AssetFilter struct {
 	Limit    int
 	Offset   int
 }
+
+type StatusRequest struct {
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+}
