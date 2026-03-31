@@ -87,14 +87,14 @@ func (r *Repository) GetMaintenanceRecordsByAssetID(ctx context.Context, assetID
             id,
             asset_id,
             maintenance_type,
-            description,
-            sent_for_repair_at,
-            vendor,
+            COALESCE(description, ''),
+            COALESCE(sent_for_repair_at::text, ''),
+            COALESCE(vendor, ''),
             maint_status,
-            returned_from_repair_at,
-            repair_cost_inr,
-            created_at,
-            updated_at
+            COALESCE(returned_from_repair_at::text, ''),
+            COALESCE(repair_cost_inr, 0),
+            created_at::text,
+            updated_at::text
         FROM asset_maintenance_logs
         WHERE asset_id = $1
         ORDER BY created_at DESC
@@ -141,7 +141,7 @@ func (r *Repository) GetAssetStatusByID(ctx context.Context, assetID string) (st
 	query := `
         SELECT status
         FROM asset_inventory
-        WHERE id = $1
+        WHERE id = $1 AND is_deleted = FALSE
     `
 
 	var status string
@@ -155,16 +155,9 @@ func (r *Repository) GetAssetStatusByID(ctx context.Context, assetID string) (st
 
 func (r *Repository) SoftDeleteAsset(ctx context.Context, assetID string) error {
 	query := `
-        WITH deleted_maintenance AS (
-            DELETE FROM asset_maintenance_logs
-            WHERE asset_id = $1
-        ),
-        deleted_assignments AS (
-            DELETE FROM asset_assignments
-            WHERE asset_id = $1
-        )
-        DELETE FROM asset_inventory
-        WHERE id = $1
+        UPDATE asset_inventory
+        SET is_deleted = TRUE
+        WHERE id = $1 AND is_deleted = FALSE
     `
 
 	tag, err := r.DB.Exec(ctx, query, assetID)
@@ -340,12 +333,12 @@ func (r *Repository) GenerateReport(ctx context.Context, filters *model.AssetFil
             asset_code,
             name,
             asset_type,
-            category,
+            COALESCE(category::text, ''),
             status,
-            serial_no,
-            location,
-            vendor,
-            created_at
+            COALESCE(serial_no, ''),
+            COALESCE(location, ''),
+            COALESCE(vendor, ''),
+            created_at::text
         FROM asset_inventory
         WHERE is_deleted = FALSE
     `

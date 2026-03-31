@@ -12,6 +12,7 @@ import (
 
 	"WITS/internal/assets/model"
 	"WITS/internal/assets/service"
+	"WITS/package/middleware"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -68,7 +69,6 @@ func (h *AssetHandler) CreateAsset(c *fiber.Ctx) error {
 func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Parse query parameters
 	status := c.Query("status", "")
 	assetType := c.Query("type", "")
 	category := c.Query("category", "")
@@ -86,7 +86,6 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 
 	offset := (page - 1) * limit
 
-	// Build filter
 	filters := &model.AssetFilter{
 		Status:   status,
 		Type:     assetType,
@@ -97,7 +96,6 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 		Offset:   offset,
 	}
 
-	// Get assets from service
 	assets, total, err := h.service.GetAssets(ctx, filters)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -110,7 +108,6 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 		assets = []model.AssetListDTO{}
 	}
 
-	// Calculate pagination metadata
 	totalPages := (total + limit - 1) / limit
 
 	return c.JSON(fiber.Map{
@@ -126,6 +123,12 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) GetMaintenanceRecords(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assetID := c.Params("id")
 	if assetID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -148,6 +151,12 @@ func (h *AssetHandler) GetMaintenanceRecords(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) DeleteAsset(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assetID := c.Params("id")
 	if assetID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -181,6 +190,12 @@ func (h *AssetHandler) DeleteAsset(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) UpdateAssetStatus(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assetID := c.Params("id")
 	if assetID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -217,10 +232,7 @@ func (h *AssetHandler) UpdateAssetStatus(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) GetActiveAssets(c *fiber.Ctx) error {
-	employeeID := c.Get("X-Employee-ID")
-	if employeeID == "" {
-		employeeID = c.Query("employeeId")
-	}
+	employeeID := middleware.CurrentEmployeeID(c)
 
 	assets, err := h.service.GetActiveAssets(c.Context(), employeeID)
 	if err != nil {
@@ -243,6 +255,12 @@ func (h *AssetHandler) GetActiveAssets(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) ReturnAsset(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assetID := c.Params("id")
 	if assetID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -286,10 +304,7 @@ func (h *AssetHandler) UpdateAssignment(c *fiber.Ctx) error {
 		})
 	}
 
-	employeeID := c.Get("X-Employee-ID")
-	if employeeID == "" {
-		employeeID = c.Query("employeeId")
-	}
+	employeeID := middleware.CurrentEmployeeID(c)
 
 	result, err := h.service.UpdateAssignment(c.Context(), assignmentID, employeeID)
 	if err != nil {
@@ -313,6 +328,12 @@ func (h *AssetHandler) UpdateAssignment(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) GetMyAssignments(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assetID := c.Params("id")
 	if assetID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -342,6 +363,12 @@ func (h *AssetHandler) GetAssetsByEmployeeID(c *fiber.Ctx) error {
 		})
 	}
 
+	if !middleware.CanAccessEmployee(c, employeeID) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	assets, err := h.service.GetAssetsByEmployeeID(c.Context(), employeeID)
 	if err != nil {
 		if errors.Is(err, service.ErrEmployeeIDRequired) {
@@ -363,6 +390,12 @@ func (h *AssetHandler) GetAssetsByEmployeeID(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) GenerateReport(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	filters := &model.AssetFilter{
 		Status:   c.Query("status", ""),
 		Type:     c.Query("type", ""),
@@ -385,6 +418,12 @@ func (h *AssetHandler) GenerateReport(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) ImportAssets(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
