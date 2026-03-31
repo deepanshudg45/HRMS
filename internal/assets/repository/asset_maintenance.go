@@ -340,12 +340,12 @@ func (r *Repository) GenerateReport(ctx context.Context, filters *model.AssetFil
             asset_code,
             name,
             asset_type,
-            category,
+            COALESCE(category::text, ''),
             status,
-            serial_no,
-            location,
-            vendor,
-            created_at
+            COALESCE(serial_no, ''),
+            COALESCE(location, ''),
+            COALESCE(vendor, ''),
+            created_at::text
         FROM asset_inventory
         WHERE is_deleted = FALSE
     `
