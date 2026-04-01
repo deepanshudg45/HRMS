@@ -41,4 +41,4 @@ CREATE TABLE IF NOT EXISTS asset_maintenance_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_asset_maintenance 
-ON asset_maintenance_logs (asset_id, maint_status, created_at);
+    ON asset_maintenance_logs (asset_id, maint_status, created_at);

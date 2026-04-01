@@ -1,39 +1,39 @@
 package main
 
 import (
-    "log"
+	"log"
 
-    "WITS/config"
-    "WITS/internal/assets/handler"
-    "WITS/internal/assets/repository"
-    "WITS/internal/assets/routes"
-    "WITS/internal/assets/service"
-    "WITS/package/database"
+	"WITS/config"
+	"WITS/internal/assets/handler"
+	"WITS/internal/assets/repository"
+	"WITS/internal/assets/routes"
+	"WITS/internal/assets/service"
+	"WITS/package/database"
 
-    "github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
-
 )
 
 func main() {
-    _ = godotenv.Load()
-    cfg := config.Load()
+	godotenv.Load()
 
-    db, err := database.Connect(cfg)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
+	cfg := config.Load()
 
-    app := fiber.New()
+	db, err := database.Connect(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
-    assetRepo := repository.NewRepository(db)
-    assetService := service.NewAssetService(assetRepo)
-    assetHandler := handler.NewAssetHandler(assetService)
+	app := fiber.New()
 
-    routes.AssetRoutes(app, assetHandler)
+	assetRepo := repository.NewRepository(db)
+	assetService := service.NewAssetService(assetRepo)
+	assetHandler := handler.NewAssetHandler(assetService)
 
-    if err := app.Listen(":" + cfg.AppPort); err != nil {
-        log.Fatal(err)
-    }
+	routes.AssetRoutes(app, assetHandler)
+
+	if err := app.Listen(":" + cfg.AppPort); err != nil {
+		log.Fatal(err)
+	}
 }

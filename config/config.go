@@ -3,18 +3,18 @@ package config
 import "os"
 
 type Config struct {
-    AppPort string
-    DBURL   string
+	AppPort string
+	DBURL   string
 }
 
 func Load() Config {
-    port := os.Getenv("APP_PORT")
-    if port == "" {
-        port = "3000"
-    }
+	appPort := os.Getenv("APP_PORT")
+	if appPort == "" {
+		appPort = "3000"
+	}
 
-    return Config{
-        AppPort: port,
-        DBURL:   os.Getenv("DATABASE_URL"),
-    }
+	return Config{
+		AppPort: appPort,
+		DBURL:   os.Getenv("DATABASE_URL"),
+	}
 }

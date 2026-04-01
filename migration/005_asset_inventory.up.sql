@@ -1,4 +1,3 @@
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DO $$
@@ -35,30 +34,30 @@ BEGIN
 END$$;
 
 CREATE TABLE IF NOT EXISTS asset_inventory (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  asset_code TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  serial_no TEXT,
-  asset_type asset_type NOT NULL,
-  category asset_category,
-  status asset_status DEFAULT 'AVAILABLE',
-  brand TEXT,
-  model TEXT,
-  purchase_date DATE,
-  purchase_cost_inr NUMERIC(12,2),
-  vendor VARCHAR(200),
-  warranty_expiry DATE,
-  location TEXT,
-  notes TEXT,
-  is_deleted BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    asset_code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    serial_no TEXT,
+    asset_type asset_type NOT NULL,
+    category asset_category,
+    status asset_status DEFAULT 'AVAILABLE',
+    brand TEXT,
+    model TEXT,
+    purchase_date DATE,
+    purchase_cost_inr NUMERIC(12,2),
+    vendor VARCHAR(200),
+    warranty_expiry DATE,
+    location TEXT,
+    notes TEXT,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_asset_serial_no
-ON asset_inventory(serial_no)
-WHERE serial_no IS NOT NULL;
+    ON asset_inventory(serial_no)
+    WHERE serial_no IS NOT NULL;
 
 CREATE SEQUENCE IF NOT EXISTS asset_code_seq START 1;
 
 CREATE INDEX IF NOT EXISTS idx_asset_filters
-ON asset_inventory(status, asset_type, is_deleted);
+    ON asset_inventory(status, asset_type, is_deleted);

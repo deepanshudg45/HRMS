@@ -50,3 +50,12 @@ type AssignmentHistoryDTO struct {
 	Notes                 string `json:"notes,omitempty"`
 	AcknowledgementStatus string `json:"acknowledgementStatus,omitempty"`
 }
+
+type MyAssetDTO struct {
+	AssetCode             string `json:"assetCode"`
+	AssetType             string `json:"assetType"`
+	AssetName             string `json:"assetName"`
+	AssignedOn            string `json:"assignedOn"`
+	AcknowledgementStatus string `json:"acknowledgementStatus,omitempty"`
+	ConditionAtAssignment string `json:"conditionAtAssignment,omitempty"`
+}

@@ -1,36 +1,36 @@
 package middleware
 
 import (
-    "strings"
+	"strings"
 
-    "github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2"
 )
 
-func HealthCheck() fiber.Handler {
-    return func(c *fiber.Ctx) error {
-        return c.JSON(fiber.Map{
-            "status": "ok",
-        })
-    }
+func CurrentEmployeeID(c *fiber.Ctx) string {
+	employeeID := strings.TrimSpace(c.Get("X-Employee-ID"))
+	if employeeID == "" {
+		employeeID = strings.TrimSpace(c.Query("employeeId"))
+	}
+	return employeeID
 }
 
-func CurrentEmployeeID(c *fiber.Ctx) string {
-    employeeID := strings.TrimSpace(c.Get("X-Employee-ID"))
-    if employeeID == "" {
-        employeeID = strings.TrimSpace(c.Query("employeeId"))
-    }
-    return employeeID
-}
- 
 func CurrentRole(c *fiber.Ctx) string {
-    return strings.ToUpper(strings.TrimSpace(c.Get("X-Role")))
+	return strings.ToUpper(strings.TrimSpace(c.Get("X-Role")))
 }
 
 func IsHR(c *fiber.Ctx) bool {
-    return CurrentRole(c) == "HR"
+	return CurrentRole(c) == "HR"
 }
 
 func CanAccessEmployee(c *fiber.Ctx, employeeID string) bool {
-    employeeID = strings.TrimSpace(employeeID)
-    return employeeID != "" && (IsHR(c) || CurrentEmployeeID(c) == employeeID)
+	employeeID = strings.TrimSpace(employeeID)
+	if employeeID == "" {
+		return false
+	}
+
+	if IsHR(c) {
+		return true
+	}
+
+	return CurrentEmployeeID(c) == employeeID
 }

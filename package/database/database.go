@@ -20,12 +20,14 @@ func Connect(cfg config.Config) (*Client, error) {
 		return nil, errors.New("DATABASE_URL is required")
 	}
 
-	pool, err := pgxpool.New(context.Background(), cfg.DBURL)
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, cfg.DBURL)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := pool.Ping(context.Background()); err != nil {
+	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, err
 	}
@@ -49,7 +51,6 @@ func (c *Client) Begin(ctx context.Context) (pgx.Tx, error) {
 	return c.pool.Begin(ctx)
 }
 
-func (c *Client) Close() error {
+func (c *Client) Close() {
 	c.pool.Close()
-	return nil
 }
