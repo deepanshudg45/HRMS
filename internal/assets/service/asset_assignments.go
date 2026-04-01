@@ -34,7 +34,7 @@ func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req mode
 		return nil, err
 	}
 
-	if err := s.dispatcher.Dispatch(ctx, EventAssetAssigned, req.EmployeeID); err != nil {
+	if err := s.dispatcher.Dispatch(ctx, EventAssetAssigned, req.EmployeeID, assetID); err != nil {
 		return nil, err
 	}
 

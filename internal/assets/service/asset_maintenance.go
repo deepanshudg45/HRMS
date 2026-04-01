@@ -29,6 +29,7 @@ type AssetRepository interface {
 	GetAssignmentsByAssetID(ctx context.Context, assetID string) ([]model.AssignmentHistoryDTO, error)
 	GetAssetsByEmployeeID(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error)
 	GenerateReport(ctx context.Context, filters *model.AssetFilter) ([]model.AssetReportDTO, error)
+	GetExpiringWarrantyAssetIDs(ctx context.Context) ([]string, error)
 }
 
 type AssetService struct {
@@ -140,13 +141,15 @@ func normalizeAssetUpsertRequest(assetType string, assetName string, brand strin
 }
 
 type AssetEventDispatcher interface {
-	Dispatch(ctx context.Context, eventName string, targetEmployee string) error
+	Dispatch(ctx context.Context, eventName string, targetEmployee string, assetID string) error
 }
 
 const EventAssetAssigned = "EventAssetAssigned"
+const EventWarrantyExpiring = "EventWarrantyExpiring"
+const HRAdminID = "hrAdmin"
 
 type noopAssetEventDispatcher struct{}
 
-func (noopAssetEventDispatcher) Dispatch(ctx context.Context, eventName string, targetEmployee string) error {
+func (noopAssetEventDispatcher) Dispatch(ctx context.Context, eventName string, targetEmployee string, assetID string) error {
 	return nil
 }

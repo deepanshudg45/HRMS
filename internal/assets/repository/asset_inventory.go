@@ -360,3 +360,35 @@ func (r *Repository) GenerateReport(ctx context.Context, filters *model.AssetFil
 
 	return reports, nil
 }
+
+func (r *Repository) GetExpiringWarrantyAssetIDs(ctx context.Context) ([]string, error) {
+	query := `
+        SELECT id::text
+        FROM asset_inventory
+        WHERE warranty_expiry = CURRENT_DATE + INTERVAL '30 days'
+          AND status NOT IN ('RETIRED', 'LOST')
+          AND is_deleted = FALSE
+    `
+
+	rows, err := r.DB.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	assetIDs := []string{}
+	for rows.Next() {
+		var assetID string
+		if err := rows.Scan(&assetID); err != nil {
+			return nil, err
+		}
+
+		assetIDs = append(assetIDs, assetID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return assetIDs, nil
+}
