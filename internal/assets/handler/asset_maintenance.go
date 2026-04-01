@@ -5,13 +5,11 @@ import (
 	"encoding/csv"
 	"errors"
 	"io"
-	"log"
 	"mime/multipart"
 	"strconv"
 	"strings"
 
 	"WITS/internal/assets/model"
-	"WITS/internal/assets/service"
 	"WITS/package/middleware"
 
 	"github.com/gofiber/fiber/v2"
@@ -49,28 +47,21 @@ func (h *AssetHandler) CreateAsset(c *fiber.Ctx) error {
 	var req model.CreateAssetRequest
 
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid request body",
 		})
 	}
 
 	asset, err := h.service.CreateAsset(c.Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrMissingRequiredFields) || errors.Is(err, service.ErrInvalidAssetType) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-
-		return c.Status(500).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to create asset",
 		})
 	}
 
-	return c.Status(201).JSON(asset)
+	return c.Status(fiber.StatusCreated).JSON(asset)
 }
 
-// GetAssets handles GET /assets with query filters
 func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 	ctx := context.Background()
 
@@ -103,9 +94,8 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 
 	assets, total, err := h.service.GetAssets(ctx, filters)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "unable to fetch assets",
 		})
 	}
 
@@ -137,14 +127,8 @@ func (h *AssetHandler) GetAssetByID(c *fiber.Ctx) error {
 
 	asset, err := h.service.GetAssetByID(c.Context(), assetID)
 	if err != nil {
-		if errors.Is(err, service.ErrAssetNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "asset not found",
 		})
 	}
 
@@ -177,20 +161,9 @@ func (h *AssetHandler) UpdateAsset(c *fiber.Ctx) error {
 
 	asset, err := h.service.UpdateAsset(c.Context(), assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrMissingRequiredFields), errors.Is(err, service.ErrInvalidAssetType):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrAssetNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to update asset",
+		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -222,24 +195,9 @@ func (h *AssetHandler) AssignAsset(c *fiber.Ctx) error {
 
 	result, err := h.service.AssignAsset(c.Context(), assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrEmployeeIDRequired), errors.Is(err, service.ErrAssignedOnRequired), errors.Is(err, service.ErrConditionAtAssignRequired):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrAssetNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrAssetUnavailable):
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to assign asset",
+		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -265,7 +223,7 @@ func (h *AssetHandler) GetMaintenanceRecords(c *fiber.Ctx) error {
 	records, err := h.service.GetMaintenanceRecordsByAssetID(c.Context(), assetID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "unable to fetch maintenance records",
 		})
 	}
 
@@ -299,24 +257,9 @@ func (h *AssetHandler) CreateMaintenanceRecord(c *fiber.Ctx) error {
 
 	record, err := h.service.CreateMaintenanceRecord(c.Context(), assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidMaintenanceType), errors.Is(err, service.ErrDescriptionRequired):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrAssetNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrMaintenanceBlocked):
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to create maintenance record",
+		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(record)
@@ -346,20 +289,9 @@ func (h *AssetHandler) UpdateMaintenanceRecord(c *fiber.Ctx) error {
 
 	record, err := h.service.UpdateMaintenanceRecord(c.Context(), assetID, maintenanceID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidMaintenanceStatus):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrAssetNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to update maintenance record",
+		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(record)
@@ -379,28 +311,13 @@ func (h *AssetHandler) DeleteAsset(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("delete asset requested id=%s", assetID)
-
 	err := h.service.DeleteAsset(c.Context(), assetID)
 	if err != nil {
-		log.Printf("delete asset failed id=%s error=%v", assetID, err)
-		if errors.Is(err, service.ErrAssetInUse) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-		if errors.Is(err, service.ErrAssetNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to delete asset",
 		})
 	}
 
-	log.Printf("delete asset succeeded id=%s", assetID)
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -427,20 +344,9 @@ func (h *AssetHandler) UpdateAssetStatus(c *fiber.Ctx) error {
 
 	asset, err := h.service.UpdateAssetStatus(c.Context(), assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrAssetInUse):
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrInvalidAssetStatus), errors.Is(err, service.ErrInvalidStatusChange):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to update asset status",
+		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(asset)
@@ -451,14 +357,8 @@ func (h *AssetHandler) GetActiveAssets(c *fiber.Ctx) error {
 
 	assets, err := h.service.GetActiveAssets(c.Context(), employeeID)
 	if err != nil {
-		if errors.Is(err, service.ErrEmployeeIDRequired) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to fetch assets",
 		})
 	}
 
@@ -492,20 +392,9 @@ func (h *AssetHandler) ReturnAsset(c *fiber.Ctx) error {
 
 	result, err := h.service.ReturnAsset(c.Context(), assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrActiveAssignmentNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrConditionAtReturnRequired):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to return asset",
+		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(result)
@@ -523,20 +412,9 @@ func (h *AssetHandler) UpdateAssignment(c *fiber.Ctx) error {
 
 	result, err := h.service.UpdateAssignment(c.Context(), assignmentID, employeeID)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrEmployeeIDRequired):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		case errors.Is(err, service.ErrForbiddenAssignmentAccess):
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to update assignment",
+		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(result)
@@ -559,7 +437,7 @@ func (h *AssetHandler) GetMyAssignments(c *fiber.Ctx) error {
 	assignments, err := h.service.GetMyAssignments(c.Context(), assetID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "unable to fetch assignments",
 		})
 	}
 
@@ -586,14 +464,8 @@ func (h *AssetHandler) GetAssetsByEmployeeID(c *fiber.Ctx) error {
 
 	assets, err := h.service.GetAssetsByEmployeeID(c.Context(), employeeID)
 	if err != nil {
-		if errors.Is(err, service.ErrEmployeeIDRequired) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "unable to fetch employee assets",
 		})
 	}
 
@@ -621,7 +493,7 @@ func (h *AssetHandler) GenerateReport(c *fiber.Ctx) error {
 	reports, err := h.service.GenerateReport(c.Context(), filters)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "unable to generate report",
 		})
 	}
 
@@ -649,14 +521,14 @@ func (h *AssetHandler) ImportAssets(c *fiber.Ctx) error {
 	requests, parseErrors, err := parseAssetImportCSV(fileHeader)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "unable to read csv file",
 		})
 	}
 
 	result, err := h.service.ImportAssets(c.Context(), requests)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "unable to import assets",
 		})
 	}
 

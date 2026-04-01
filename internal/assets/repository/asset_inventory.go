@@ -8,7 +8,6 @@ import (
 	"WITS/internal/assets/model"
 )
 
-// GetAssets retrieves assets with dynamic filtering and pagination
 func (r *Repository) GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error) {
 	query := `SELECT id, asset_code, name, serial_no, asset_type, category, status 
 	          FROM asset_inventory WHERE is_deleted = FALSE`
@@ -40,7 +39,6 @@ func (r *Repository) GetAssets(ctx context.Context, filters *model.AssetFilter) 
 		paramCount++
 	}
 
-	// Get total count using a subquery
 	countSQL := `SELECT COUNT(*) FROM (` + query + `) AS filtered`
 	var total int
 	err := r.DB.QueryRow(ctx, countSQL, args...).Scan(&total)
@@ -48,7 +46,6 @@ func (r *Repository) GetAssets(ctx context.Context, filters *model.AssetFilter) 
 		return nil, 0, err
 	}
 
-	// Add pagination
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramCount, paramCount+1)
 	args = append(args, filters.Limit, filters.Offset)
 

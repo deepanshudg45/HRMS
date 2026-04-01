@@ -9,24 +9,21 @@ import (
 func AssetRoutes(app *fiber.App, handler *handler.AssetHandler) {
 	asset := app.Group("/api/v1")
 
-	// Asset inventory routes
 	asset.Get("/assets", handler.GetAssets)
-	asset.Get("/assets/:id", handler.GetAssetByID)
 	asset.Post("/assets", handler.CreateAsset)
+	asset.Get("/assets/:id", handler.GetAssetByID)
 	asset.Put("/assets/:id", handler.UpdateAsset)
+	asset.Delete("/assets/:id", handler.DeleteAsset)
 	asset.Post("/assets/:id/assign", handler.AssignAsset)
+	asset.Get("/assets/my", handler.GetActiveAssets)
+	asset.Patch("/assets/:id/status", handler.UpdateAssetStatus)
+	asset.Post("/assets/:id/return", handler.ReturnAsset)
+	asset.Get("/assets/employee/:employeeId", handler.GetAssetsByEmployeeID)
+	asset.Get("/assets/:id/assignments", handler.GetMyAssignments)
+	asset.Get("/assets/:id/maintenance", handler.GetMaintenanceRecords)
 	asset.Post("/assets/:id/maintenance", handler.CreateMaintenanceRecord)
 	asset.Patch("/assets/:id/maintenance/:maintenanceId", handler.UpdateMaintenanceRecord)
-	asset.Delete("/assets/:id", handler.DeleteAsset)
-	asset.Patch("/assets/:id/status", handler.UpdateAssetStatus)
-	asset.Get("/assets/my", handler.GetActiveAssets)
-	asset.Post("/assets/:id/return", handler.ReturnAsset)
 	asset.Patch("/assets/assignments/:id/acknowledge", handler.UpdateAssignment)
-	asset.Get("/assets/:id/assignments", handler.GetMyAssignments)
-	asset.Get("/assets/employee/:employeeId", handler.GetAssetsByEmployeeID)
 	asset.Get("/assets/admin/reports", handler.GenerateReport)
 	asset.Post("/assets/import", handler.ImportAssets)
-
-	// Other commented endpoints for future implementation
-	asset.Get("/assets/:id/maintenance", handler.GetMaintenanceRecords)
 }

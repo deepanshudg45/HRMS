@@ -1,5 +1,3 @@
-// DB model
-
 package model
 
 type Asset struct {

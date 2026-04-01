@@ -34,8 +34,7 @@ func NewRepository(db DB) *Repository {
 
 func (r *Repository) CreateAsset(ctx context.Context, asset model.Asset) error {
 	query := `
-        INSERT INTO asset_inventory 
-        (
+        INSERT INTO asset_inventory (
             asset_code,
             asset_type,
             name,
@@ -53,7 +52,9 @@ func (r *Repository) CreateAsset(ctx context.Context, asset model.Asset) error {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     `
 
-	_, err := r.DB.Exec(ctx, query,
+	_, err := r.DB.Exec(
+		ctx,
+		query,
 		asset.AssetCode,
 		asset.AssetType,
 		asset.AssetName,
@@ -597,6 +598,34 @@ func (r *Repository) GetAssignmentOwnerByID(ctx context.Context, assignmentID st
 	}
 
 	return employeeID, nil
+}
+
+func (r *Repository) UpdateAssignmentAcknowledgement(ctx context.Context, assignmentID string) (*model.AssignmentDTO, error) {
+	query := `
+        UPDATE asset_assignments
+        SET
+            acknowledgement_status = 'ACKNOWLEDGED',
+            acknowledged_at = NOW()
+        WHERE id = $1
+        RETURNING
+            id,
+            assigned_to,
+            acknowledgement_status,
+            COALESCE(acknowledged_at::text, '')
+    `
+
+	var assignment model.AssignmentDTO
+	err := r.DB.QueryRow(ctx, query, assignmentID).Scan(
+		&assignment.ID,
+		&assignment.EmployeeID,
+		&assignment.AcknowledgementStatus,
+		&assignment.AcknowledgedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &assignment, nil
 }
 
 func (r *Repository) GetAssignmentsByAssetID(ctx context.Context, assetID string) ([]model.AssignmentHistoryDTO, error) {

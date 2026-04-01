@@ -7,30 +7,7 @@ import (
 	"time"
 
 	"WITS/internal/assets/model"
-	"WITS/internal/assets/repository"
 	"WITS/package/utils"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var (
-	ErrMissingRequiredFields     = errors.New("assetType, assetName and assetCategory are required")
-	ErrInvalidAssetType          = errors.New("invalid asset type")
-	ErrAssetInUse                = errors.New("asset is in use")
-	ErrAssetNotFound             = errors.New("asset not found")
-	ErrInvalidAssetStatus        = errors.New("invalid asset status")
-	ErrInvalidStatusChange       = errors.New("only RETIRED and LOST transitions are allowed")
-	ErrEmployeeIDRequired        = errors.New("employee id is required")
-	ErrActiveAssignmentNotFound  = errors.New("active assignment not found")
-	ErrConditionAtReturnRequired = errors.New("conditionAtReturn is required")
-	ErrForbiddenAssignmentAccess = errors.New("you do not own this assignment")
-	ErrAssetUnavailable          = errors.New("asset is not available for assignment")
-	ErrAssignedOnRequired        = errors.New("assignedOn is required")
-	ErrConditionAtAssignRequired = errors.New("conditionAtAssignment is required")
-	ErrInvalidMaintenanceType    = errors.New("invalid maintenance type")
-	ErrDescriptionRequired       = errors.New("description is required")
-	ErrMaintenanceBlocked        = errors.New("asset cannot be sent for maintenance")
-	ErrInvalidMaintenanceStatus  = errors.New("invalid maintenance status")
 )
 
 type AssetRepository interface {
@@ -50,6 +27,7 @@ type AssetRepository interface {
 	GetActiveAssignmentIDByAssetID(ctx context.Context, assetID string) (string, error)
 	DeactivateAssignment(ctx context.Context, assignmentID string) error
 	GetAssignmentOwnerByID(ctx context.Context, assignmentID string) (string, error)
+	UpdateAssignmentAcknowledgement(ctx context.Context, assignmentID string) (*model.AssignmentDTO, error)
 	GetAssignmentsByAssetID(ctx context.Context, assetID string) ([]model.AssignmentHistoryDTO, error)
 	GetAssetsByEmployeeID(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error)
 	GenerateReport(ctx context.Context, filters *model.AssetFilter) ([]model.AssetReportDTO, error)
@@ -68,22 +46,20 @@ func NewAssetService(repo AssetRepository) *AssetService {
 }
 
 func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetRequest) (*model.AssetDTO, error) {
-	normalized, err := normalizeAssetUpsertRequest(
-		req.AssetType,
-		req.AssetName,
-		req.Brand,
-		req.Model,
-		req.AssetCategory,
-		req.SerialNo,
-		req.PurchaseDate,
-		req.PurchaseCostINR,
-		req.Vendor,
-		req.WarrantyExpiry,
-		req.Location,
-		req.Notes,
-	)
-	if err != nil {
-		return nil, err
+	req.AssetType = strings.ToUpper(strings.TrimSpace(req.AssetType))
+	req.AssetName = strings.TrimSpace(req.AssetName)
+	req.Brand = strings.TrimSpace(req.Brand)
+	req.Model = strings.TrimSpace(req.Model)
+	req.AssetCategory = strings.TrimSpace(req.AssetCategory)
+	req.SerialNo = strings.TrimSpace(req.SerialNo)
+	req.PurchaseDate = strings.TrimSpace(req.PurchaseDate)
+	req.Vendor = strings.TrimSpace(req.Vendor)
+	req.WarrantyExpiry = strings.TrimSpace(req.WarrantyExpiry)
+	req.Location = strings.TrimSpace(req.Location)
+	req.Notes = strings.TrimSpace(req.Notes)
+
+	if req.AssetType == "" || req.AssetName == "" || req.AssetCategory == "" {
+		return nil, errors.New("assetType, assetName and assetCategory are required")
 	}
 
 	seq, err := s.repo.NextAssetSeq(ctx)
@@ -96,29 +72,28 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
 
 	asset := model.Asset{
 		AssetCode:       assetCode,
-		AssetType:       normalized.AssetType,
-		AssetName:       normalized.AssetName,
-		Brand:           normalized.Brand,
-		Model:           normalized.Model,
-		AssetCategory:   normalized.AssetCategory,
-		SerialNo:        normalized.SerialNo,
-		PurchaseDate:    normalized.PurchaseDate,
-		PurchaseCostINR: normalized.PurchaseCostINR,
-		Vendor:          normalized.Vendor,
-		WarrantyExpiry:  normalized.WarrantyExpiry,
-		Location:        normalized.Location,
-		Notes:           normalized.Notes,
+		AssetType:       req.AssetType,
+		AssetName:       req.AssetName,
+		Brand:           req.Brand,
+		Model:           req.Model,
+		AssetCategory:   req.AssetCategory,
+		SerialNo:        req.SerialNo,
+		PurchaseDate:    req.PurchaseDate,
+		PurchaseCostINR: req.PurchaseCostINR,
+		Vendor:          req.Vendor,
+		WarrantyExpiry:  req.WarrantyExpiry,
+		Location:        req.Location,
+		Notes:           req.Notes,
 	}
 
-	err = s.repo.CreateAsset(ctx, asset)
-	if err != nil {
+	if err := s.repo.CreateAsset(ctx, asset); err != nil {
 		return nil, err
 	}
 
 	return &model.AssetDTO{
 		AssetCode: assetCode,
-		AssetName: normalized.AssetName,
-		AssetType: normalized.AssetType,
+		AssetName: req.AssetName,
+		AssetType: req.AssetType,
 		Status:    "CREATED",
 	}, nil
 }
@@ -126,7 +101,7 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
 func (s *AssetService) UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) (*model.AssetDetailDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
-		return nil, ErrAssetNotFound
+		return nil, errors.New("asset id is required")
 	}
 
 	normalized, err := normalizeAssetUpsertRequest(
@@ -163,9 +138,6 @@ func (s *AssetService) UpdateAsset(ctx context.Context, assetID string, req mode
 	}
 
 	if err := s.repo.UpdateAsset(ctx, assetID, asset); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrAssetNotFound
-		}
 		return nil, err
 	}
 
@@ -175,7 +147,7 @@ func (s *AssetService) UpdateAsset(ctx context.Context, assetID string, req mode
 func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
-		return nil, ErrAssetNotFound
+		return nil, errors.New("asset id is required")
 	}
 
 	req.EmployeeID = strings.TrimSpace(req.EmployeeID)
@@ -184,25 +156,18 @@ func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req mode
 	req.Notes = strings.TrimSpace(req.Notes)
 
 	if req.EmployeeID == "" {
-		return nil, ErrEmployeeIDRequired
+		return nil, errors.New("employee id is required")
 	}
 	if req.AssignedOn == "" {
-		return nil, ErrAssignedOnRequired
+		return nil, errors.New("assignedOn is required")
 	}
 	if req.ConditionAtAssignment == "" {
-		return nil, ErrConditionAtAssignRequired
+		return nil, errors.New("conditionAtAssignment is required")
 	}
 
 	assignment, err := s.repo.AssignAsset(ctx, assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, ErrAssetNotFound
-		case errors.Is(err, repository.ErrAssetUnavailable):
-			return nil, ErrAssetUnavailable
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
 	if err := s.dispatcher.Dispatch(ctx, EventAssetAssigned, req.EmployeeID); err != nil {
@@ -212,7 +177,6 @@ func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req mode
 	return assignment, nil
 }
 
-// GetAssets retrieves assets with filters and pagination
 func (s *AssetService) GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error) {
 	return s.repo.GetAssets(ctx, filters)
 }
@@ -220,14 +184,11 @@ func (s *AssetService) GetAssets(ctx context.Context, filters *model.AssetFilter
 func (s *AssetService) GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
-		return nil, ErrAssetNotFound
+		return nil, errors.New("asset id is required")
 	}
 
 	asset, err := s.repo.GetAssetByID(ctx, assetID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrAssetNotFound
-		}
 		return nil, err
 	}
 
@@ -241,7 +202,7 @@ func (s *AssetService) GetMaintenanceRecordsByAssetID(ctx context.Context, asset
 func (s *AssetService) CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
-		return nil, ErrAssetNotFound
+		return nil, errors.New("asset id is required")
 	}
 
 	req.MaintenanceType = strings.ToUpper(strings.TrimSpace(req.MaintenanceType))
@@ -250,7 +211,7 @@ func (s *AssetService) CreateMaintenanceRecord(ctx context.Context, assetID stri
 	req.Vendor = strings.TrimSpace(req.Vendor)
 
 	if req.Description == "" {
-		return nil, ErrDescriptionRequired
+		return nil, errors.New("description is required")
 	}
 
 	validTypes := map[string]bool{
@@ -260,19 +221,12 @@ func (s *AssetService) CreateMaintenanceRecord(ctx context.Context, assetID stri
 		"DISPOSAL":   true,
 	}
 	if !validTypes[req.MaintenanceType] {
-		return nil, ErrInvalidMaintenanceType
+		return nil, errors.New("invalid maintenance type")
 	}
 
 	record, err := s.repo.CreateMaintenanceRecord(ctx, assetID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, ErrAssetNotFound
-		case errors.Is(err, repository.ErrAssetUnavailable):
-			return nil, ErrMaintenanceBlocked
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return record, nil
@@ -282,7 +236,7 @@ func (s *AssetService) UpdateMaintenanceRecord(ctx context.Context, assetID stri
 	assetID = strings.TrimSpace(assetID)
 	maintenanceID = strings.TrimSpace(maintenanceID)
 	if assetID == "" || maintenanceID == "" {
-		return nil, ErrAssetNotFound
+		return nil, errors.New("asset id and maintenance id are required")
 	}
 
 	req.Status = strings.ToUpper(strings.TrimSpace(req.Status))
@@ -291,14 +245,11 @@ func (s *AssetService) UpdateMaintenanceRecord(ctx context.Context, assetID stri
 	req.Notes = strings.TrimSpace(req.Notes)
 
 	if req.Status != "COMPLETED" && req.Status != "SCRAPPED" && req.Status != "IN_PROGRESS" {
-		return nil, ErrInvalidMaintenanceStatus
+		return nil, errors.New("invalid maintenance status")
 	}
 
 	record, err := s.repo.UpdateMaintenanceRecord(ctx, assetID, maintenanceID, req)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrAssetNotFound
-		}
 		return nil, err
 	}
 
@@ -308,20 +259,14 @@ func (s *AssetService) UpdateMaintenanceRecord(ctx context.Context, assetID stri
 func (s *AssetService) DeleteAsset(ctx context.Context, assetID string) error {
 	status, err := s.repo.GetAssetStatusByID(ctx, assetID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrAssetNotFound
-		}
 		return err
 	}
 
 	if status != "AVAILABLE" && status != "RETIRED" {
-		return ErrAssetInUse
+		return errors.New("asset is in use")
 	}
 
 	if err := s.repo.SoftDeleteAsset(ctx, assetID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrAssetNotFound
-		}
 		return err
 	}
 
@@ -331,11 +276,11 @@ func (s *AssetService) DeleteAsset(ctx context.Context, assetID string) error {
 func (s *AssetService) UpdateAssetStatus(ctx context.Context, assetID string, req model.StatusRequest) (*model.AssetDTO, error) {
 	nextStatus := strings.ToUpper(strings.TrimSpace(req.Status))
 	if nextStatus == "" {
-		return nil, ErrInvalidAssetStatus
+		return nil, errors.New("invalid asset status")
 	}
 
 	if nextStatus != "RETIRED" && nextStatus != "LOST" {
-		return nil, ErrInvalidStatusChange
+		return nil, errors.New("only RETIRED and LOST transitions are allowed")
 	}
 
 	currentStatus, err := s.repo.GetAssetStatusByID(ctx, assetID)
@@ -344,7 +289,7 @@ func (s *AssetService) UpdateAssetStatus(ctx context.Context, assetID string, re
 	}
 
 	if currentStatus == "ASSIGNED" {
-		return nil, ErrAssetInUse
+		return nil, errors.New("asset is in use")
 	}
 
 	return s.repo.UpdateAssetStatus(ctx, assetID, nextStatus)
@@ -353,7 +298,7 @@ func (s *AssetService) UpdateAssetStatus(ctx context.Context, assetID string, re
 func (s *AssetService) GetActiveAssets(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error) {
 	employeeID = strings.TrimSpace(employeeID)
 	if employeeID == "" {
-		return nil, ErrEmployeeIDRequired
+		return nil, errors.New("employee id is required")
 	}
 
 	return s.repo.GetActiveAssetsByEmployeeID(ctx, employeeID)
@@ -365,12 +310,12 @@ func (s *AssetService) ReturnAsset(ctx context.Context, assetID string, req mode
 	req.ReturnReason = strings.TrimSpace(req.ReturnReason)
 
 	if req.ConditionAtReturn == "" {
-		return nil, ErrConditionAtReturnRequired
+		return nil, errors.New("conditionAtReturn is required")
 	}
 
 	assignmentID, err := s.repo.GetActiveAssignmentIDByAssetID(ctx, assetID)
 	if err != nil {
-		return nil, ErrActiveAssignmentNotFound
+		return nil, errors.New("active assignment not found")
 	}
 
 	if err := s.repo.DeactivateAssignment(ctx, assignmentID); err != nil {
@@ -386,7 +331,7 @@ func (s *AssetService) ReturnAsset(ctx context.Context, assetID string, req mode
 	case "LOST":
 		nextStatus = "LOST"
 	default:
-		return nil, ErrConditionAtReturnRequired
+		return nil, errors.New("conditionAtReturn is required")
 	}
 
 	if _, err := s.repo.UpdateAssetStatus(ctx, assetID, nextStatus); err != nil {
@@ -408,7 +353,7 @@ func (s *AssetService) UpdateAssignment(ctx context.Context, assignmentID string
 	employeeID = strings.TrimSpace(employeeID)
 
 	if employeeID == "" {
-		return nil, ErrEmployeeIDRequired
+		return nil, errors.New("employee id is required")
 	}
 
 	ownerID, err := s.repo.GetAssignmentOwnerByID(ctx, assignmentID)
@@ -417,22 +362,16 @@ func (s *AssetService) UpdateAssignment(ctx context.Context, assignmentID string
 	}
 
 	if ownerID != employeeID {
-		return nil, ErrForbiddenAssignmentAccess
+		return nil, errors.New("you do not own this assignment")
 	}
 
-	acknowledgedAt := time.Now().Format(time.RFC3339)
-	return &model.AssignmentDTO{
-		ID:                    assignmentID,
-		EmployeeID:            employeeID,
-		AcknowledgementStatus: "ACKNOWLEDGED",
-		AcknowledgedAt:        acknowledgedAt,
-	}, nil
+	return s.repo.UpdateAssignmentAcknowledgement(ctx, assignmentID)
 }
 
 func (s *AssetService) GetMyAssignments(ctx context.Context, assetID string) ([]model.AssignmentHistoryDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
-		return nil, ErrInvalidAssetStatus
+		return nil, errors.New("asset id is required")
 	}
 
 	return s.repo.GetAssignmentsByAssetID(ctx, assetID)
@@ -441,7 +380,7 @@ func (s *AssetService) GetMyAssignments(ctx context.Context, assetID string) ([]
 func (s *AssetService) GetAssetsByEmployeeID(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error) {
 	employeeID = strings.TrimSpace(employeeID)
 	if employeeID == "" {
-		return nil, ErrEmployeeIDRequired
+		return nil, errors.New("employee id is required")
 	}
 
 	return s.repo.GetAssetsByEmployeeID(ctx, employeeID)
@@ -489,7 +428,7 @@ func normalizeAssetUpsertRequest(assetType string, assetName string, brand strin
 	}
 
 	if req.AssetType == "" || req.AssetName == "" || req.AssetCategory == "" {
-		return nil, ErrMissingRequiredFields
+		return nil, errors.New("assetType, assetName and assetCategory are required")
 	}
 
 	validTypes := map[string]bool{
@@ -501,7 +440,7 @@ func normalizeAssetUpsertRequest(assetType string, assetName string, brand strin
 	}
 
 	if !validTypes[req.AssetType] {
-		return nil, ErrInvalidAssetType
+		return nil, errors.New("invalid asset type")
 	}
 
 	return req, nil

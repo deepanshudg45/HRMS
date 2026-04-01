@@ -33,7 +33,6 @@ BEGIN
         );
     END IF;
 END$$;
-CREATE SEQUENCE IF NOT EXISTS asset_code_seq START 1;
 
 CREATE TABLE IF NOT EXISTS asset_inventory (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,6 +58,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_asset_serial_no
 ON asset_inventory(serial_no)
 WHERE serial_no IS NOT NULL;
 
+CREATE SEQUENCE IF NOT EXISTS asset_code_seq START 1;
 
 CREATE INDEX IF NOT EXISTS idx_asset_filters
 ON asset_inventory(status, asset_type, is_deleted);

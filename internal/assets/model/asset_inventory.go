@@ -14,7 +14,6 @@ type AssetInventory struct {
 	CreatedAt string    `json:"created_at"`
 }
 
-// AssetFilter represents query parameters for asset filtering
 type AssetFilter struct {
 	Status   string
 	Type     string
