@@ -1,10 +1,10 @@
 package model
 
 type AssetDTO struct {
-    AssetCode string `json:"assetCode"`
-    AssetName string `json:"assetName"`
-    AssetType string `json:"assetType"`
-    Status    string `json:"status"`
+	AssetCode string `json:"assetCode"`
+	AssetName string `json:"assetName"`
+	AssetType string `json:"assetType"`
+	Status    string `json:"status"`
 }
 
 type AssetListDTO struct {
@@ -15,6 +15,30 @@ type AssetListDTO struct {
 	Type     string `json:"type"`
 	Category string `json:"category"`
 	Status   string `json:"status"`
+}
+
+type EmployeeSummaryDTO struct {
+	EmployeeID string `json:"employeeId"`
+}
+
+type AssetDetailDTO struct {
+	ID              string              `json:"id"`
+	AssetCode       string              `json:"assetCode"`
+	AssetName       string              `json:"assetName"`
+	AssetType       string              `json:"assetType"`
+	AssetCategory   string              `json:"assetCategory"`
+	Status          string              `json:"status"`
+	SerialNo        string              `json:"serialNo"`
+	Brand           string              `json:"brand"`
+	Model           string              `json:"model"`
+	PurchaseDate    string              `json:"purchaseDate"`
+	PurchaseCostINR float64             `json:"purchaseCostINR"`
+	Vendor          string              `json:"vendor"`
+	WarrantyExpiry  string              `json:"warrantyExpiry"`
+	Location        string              `json:"location"`
+	Notes           string              `json:"notes"`
+	CurrentAssignee *EmployeeSummaryDTO `json:"currentAssignee,omitempty"`
+	AssignmentID    *string             `json:"assignmentId,omitempty"`
 }
 
 type MyAssetDTO struct {

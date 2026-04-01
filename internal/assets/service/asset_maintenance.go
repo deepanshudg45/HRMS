@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"WITS/internal/assets/model"
+	"WITS/internal/assets/repository"
 	"WITS/package/utils"
 
 	"github.com/jackc/pgx/v5"
@@ -23,14 +24,26 @@ var (
 	ErrActiveAssignmentNotFound  = errors.New("active assignment not found")
 	ErrConditionAtReturnRequired = errors.New("conditionAtReturn is required")
 	ErrForbiddenAssignmentAccess = errors.New("you do not own this assignment")
+	ErrAssetUnavailable          = errors.New("asset is not available for assignment")
+	ErrAssignedOnRequired        = errors.New("assignedOn is required")
+	ErrConditionAtAssignRequired = errors.New("conditionAtAssignment is required")
+	ErrInvalidMaintenanceType    = errors.New("invalid maintenance type")
+	ErrDescriptionRequired       = errors.New("description is required")
+	ErrMaintenanceBlocked        = errors.New("asset cannot be sent for maintenance")
+	ErrInvalidMaintenanceStatus  = errors.New("invalid maintenance status")
 )
 
 type AssetRepository interface {
 	NextAssetSeq(ctx context.Context) (int64, error)
 	CreateAsset(ctx context.Context, asset model.Asset) error
 	GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error)
+	GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error)
+	UpdateAsset(ctx context.Context, assetID string, asset model.Asset) error
 	GetMaintenanceRecordsByAssetID(ctx context.Context, assetID string) ([]model.MaintenanceDTO, error)
+	CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error)
+	UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error)
 	GetAssetStatusByID(ctx context.Context, assetID string) (string, error)
+	AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error)
 	SoftDeleteAsset(ctx context.Context, assetID string) error
 	UpdateAssetStatus(ctx context.Context, assetID string, status string) (*model.AssetDTO, error)
 	GetActiveAssetsByEmployeeID(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error)
@@ -43,40 +56,35 @@ type AssetRepository interface {
 }
 
 type AssetService struct {
-	repo AssetRepository
+	repo       AssetRepository
+	dispatcher AssetEventDispatcher
 }
 
 func NewAssetService(repo AssetRepository) *AssetService {
-	return &AssetService{repo: repo}
+	return &AssetService{
+		repo:       repo,
+		dispatcher: noopAssetEventDispatcher{},
+	}
 }
 
 func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetRequest) (*model.AssetDTO, error) {
-	req.AssetName = strings.TrimSpace(req.AssetName)
-	req.AssetCategory = strings.TrimSpace(req.AssetCategory)
-	req.Brand = strings.TrimSpace(req.Brand)
-	req.Model = strings.TrimSpace(req.Model)
-	req.SerialNo = strings.TrimSpace(req.SerialNo)
-	req.PurchaseDate = strings.TrimSpace(req.PurchaseDate)
-	req.Vendor = strings.TrimSpace(req.Vendor)
-	req.WarrantyExpiry = strings.TrimSpace(req.WarrantyExpiry)
-	req.Location = strings.TrimSpace(req.Location)
-	req.Notes = strings.TrimSpace(req.Notes)
-
-	if req.AssetType == "" || req.AssetName == "" || req.AssetCategory == "" {
-		return nil, ErrMissingRequiredFields
+	normalized, err := normalizeAssetUpsertRequest(
+		req.AssetType,
+		req.AssetName,
+		req.Brand,
+		req.Model,
+		req.AssetCategory,
+		req.SerialNo,
+		req.PurchaseDate,
+		req.PurchaseCostINR,
+		req.Vendor,
+		req.WarrantyExpiry,
+		req.Location,
+		req.Notes,
+	)
+	if err != nil {
+		return nil, err
 	}
-
-	validTypes := map[string]bool{
-		"LAPTOP":      true,
-		"MOBILE":      true,
-		"ACCESS_CARD": true,
-	}
-
-	assetType := strings.ToUpper(strings.TrimSpace(req.AssetType))
-	if !validTypes[assetType] {
-		return nil, ErrInvalidAssetType
-	}
-	req.AssetType = assetType
 
 	seq, err := s.repo.NextAssetSeq(ctx)
 	if err != nil {
@@ -88,18 +96,18 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
 
 	asset := model.Asset{
 		AssetCode:       assetCode,
-		AssetType:       req.AssetType,
-		AssetName:       req.AssetName,
-		Brand:           req.Brand,
-		Model:           req.Model,
-		AssetCategory:   req.AssetCategory,
-		SerialNo:        req.SerialNo,
-		PurchaseDate:    req.PurchaseDate,
-		PurchaseCostINR: req.PurchaseCostINR,
-		Vendor:          req.Vendor,
-		WarrantyExpiry:  req.WarrantyExpiry,
-		Location:        req.Location,
-		Notes:           req.Notes,
+		AssetType:       normalized.AssetType,
+		AssetName:       normalized.AssetName,
+		Brand:           normalized.Brand,
+		Model:           normalized.Model,
+		AssetCategory:   normalized.AssetCategory,
+		SerialNo:        normalized.SerialNo,
+		PurchaseDate:    normalized.PurchaseDate,
+		PurchaseCostINR: normalized.PurchaseCostINR,
+		Vendor:          normalized.Vendor,
+		WarrantyExpiry:  normalized.WarrantyExpiry,
+		Location:        normalized.Location,
+		Notes:           normalized.Notes,
 	}
 
 	err = s.repo.CreateAsset(ctx, asset)
@@ -109,10 +117,99 @@ func (s *AssetService) CreateAsset(ctx context.Context, req model.CreateAssetReq
 
 	return &model.AssetDTO{
 		AssetCode: assetCode,
-		AssetName: req.AssetName,
-		AssetType: req.AssetType,
+		AssetName: normalized.AssetName,
+		AssetType: normalized.AssetType,
 		Status:    "CREATED",
 	}, nil
+}
+
+func (s *AssetService) UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) (*model.AssetDetailDTO, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return nil, ErrAssetNotFound
+	}
+
+	normalized, err := normalizeAssetUpsertRequest(
+		req.AssetType,
+		req.AssetName,
+		req.Brand,
+		req.Model,
+		req.AssetCategory,
+		req.SerialNo,
+		req.PurchaseDate,
+		req.PurchaseCostINR,
+		req.Vendor,
+		req.WarrantyExpiry,
+		req.Location,
+		req.Notes,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	asset := model.Asset{
+		AssetType:       normalized.AssetType,
+		AssetName:       normalized.AssetName,
+		Brand:           normalized.Brand,
+		Model:           normalized.Model,
+		AssetCategory:   normalized.AssetCategory,
+		SerialNo:        normalized.SerialNo,
+		PurchaseDate:    normalized.PurchaseDate,
+		PurchaseCostINR: normalized.PurchaseCostINR,
+		Vendor:          normalized.Vendor,
+		WarrantyExpiry:  normalized.WarrantyExpiry,
+		Location:        normalized.Location,
+		Notes:           normalized.Notes,
+	}
+
+	if err := s.repo.UpdateAsset(ctx, assetID, asset); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAssetNotFound
+		}
+		return nil, err
+	}
+
+	return s.repo.GetAssetByID(ctx, assetID)
+}
+
+func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return nil, ErrAssetNotFound
+	}
+
+	req.EmployeeID = strings.TrimSpace(req.EmployeeID)
+	req.AssignedOn = strings.TrimSpace(req.AssignedOn)
+	req.ConditionAtAssignment = strings.ToUpper(strings.TrimSpace(req.ConditionAtAssignment))
+	req.Notes = strings.TrimSpace(req.Notes)
+
+	if req.EmployeeID == "" {
+		return nil, ErrEmployeeIDRequired
+	}
+	if req.AssignedOn == "" {
+		return nil, ErrAssignedOnRequired
+	}
+	if req.ConditionAtAssignment == "" {
+		return nil, ErrConditionAtAssignRequired
+	}
+
+	assignment, err := s.repo.AssignAsset(ctx, assetID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrAssetNotFound
+		case errors.Is(err, repository.ErrAssetUnavailable):
+			return nil, ErrAssetUnavailable
+		default:
+			return nil, err
+		}
+	}
+
+	if err := s.dispatcher.Dispatch(ctx, EventAssetAssigned, req.EmployeeID); err != nil {
+		return nil, err
+	}
+
+	return assignment, nil
 }
 
 // GetAssets retrieves assets with filters and pagination
@@ -120,8 +217,92 @@ func (s *AssetService) GetAssets(ctx context.Context, filters *model.AssetFilter
 	return s.repo.GetAssets(ctx, filters)
 }
 
+func (s *AssetService) GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return nil, ErrAssetNotFound
+	}
+
+	asset, err := s.repo.GetAssetByID(ctx, assetID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAssetNotFound
+		}
+		return nil, err
+	}
+
+	return asset, nil
+}
+
 func (s *AssetService) GetMaintenanceRecordsByAssetID(ctx context.Context, assetID string) ([]model.MaintenanceDTO, error) {
 	return s.repo.GetMaintenanceRecordsByAssetID(ctx, assetID)
+}
+
+func (s *AssetService) CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return nil, ErrAssetNotFound
+	}
+
+	req.MaintenanceType = strings.ToUpper(strings.TrimSpace(req.MaintenanceType))
+	req.Description = strings.TrimSpace(req.Description)
+	req.SentForRepairAt = strings.TrimSpace(req.SentForRepairAt)
+	req.Vendor = strings.TrimSpace(req.Vendor)
+
+	if req.Description == "" {
+		return nil, ErrDescriptionRequired
+	}
+
+	validTypes := map[string]bool{
+		"REPAIR":     true,
+		"SERVICE":    true,
+		"INSPECTION": true,
+		"DISPOSAL":   true,
+	}
+	if !validTypes[req.MaintenanceType] {
+		return nil, ErrInvalidMaintenanceType
+	}
+
+	record, err := s.repo.CreateMaintenanceRecord(ctx, assetID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrAssetNotFound
+		case errors.Is(err, repository.ErrAssetUnavailable):
+			return nil, ErrMaintenanceBlocked
+		default:
+			return nil, err
+		}
+	}
+
+	return record, nil
+}
+
+func (s *AssetService) UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error) {
+	assetID = strings.TrimSpace(assetID)
+	maintenanceID = strings.TrimSpace(maintenanceID)
+	if assetID == "" || maintenanceID == "" {
+		return nil, ErrAssetNotFound
+	}
+
+	req.Status = strings.ToUpper(strings.TrimSpace(req.Status))
+	req.ReturnedFromRepairAt = strings.TrimSpace(req.ReturnedFromRepairAt)
+	req.Vendor = strings.TrimSpace(req.Vendor)
+	req.Notes = strings.TrimSpace(req.Notes)
+
+	if req.Status != "COMPLETED" && req.Status != "SCRAPPED" && req.Status != "IN_PROGRESS" {
+		return nil, ErrInvalidMaintenanceStatus
+	}
+
+	record, err := s.repo.UpdateMaintenanceRecord(ctx, assetID, maintenanceID, req)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAssetNotFound
+		}
+		return nil, err
+	}
+
+	return record, nil
 }
 
 func (s *AssetService) DeleteAsset(ctx context.Context, assetID string) error {
@@ -289,4 +470,51 @@ func (s *AssetService) ImportAssets(ctx context.Context, requests []model.Create
 	}
 
 	return result, nil
+}
+
+func normalizeAssetUpsertRequest(assetType string, assetName string, brand string, modelName string, assetCategory string, serialNo string, purchaseDate string, purchaseCostINR float64, vendor string, warrantyExpiry string, location string, notes string) (*model.CreateAssetRequest, error) {
+	req := &model.CreateAssetRequest{
+		AssetType:       strings.ToUpper(strings.TrimSpace(assetType)),
+		AssetName:       strings.TrimSpace(assetName),
+		Brand:           strings.TrimSpace(brand),
+		Model:           strings.TrimSpace(modelName),
+		AssetCategory:   strings.TrimSpace(assetCategory),
+		SerialNo:        strings.TrimSpace(serialNo),
+		PurchaseDate:    strings.TrimSpace(purchaseDate),
+		PurchaseCostINR: purchaseCostINR,
+		Vendor:          strings.TrimSpace(vendor),
+		WarrantyExpiry:  strings.TrimSpace(warrantyExpiry),
+		Location:        strings.TrimSpace(location),
+		Notes:           strings.TrimSpace(notes),
+	}
+
+	if req.AssetType == "" || req.AssetName == "" || req.AssetCategory == "" {
+		return nil, ErrMissingRequiredFields
+	}
+
+	validTypes := map[string]bool{
+		"LAPTOP":    true,
+		"MOBILE":    true,
+		"DESKTOP":   true,
+		"FURNITURE": true,
+		"OTHER":     true,
+	}
+
+	if !validTypes[req.AssetType] {
+		return nil, ErrInvalidAssetType
+	}
+
+	return req, nil
+}
+
+type AssetEventDispatcher interface {
+	Dispatch(ctx context.Context, eventName string, targetEmployee string) error
+}
+
+const EventAssetAssigned = "EventAssetAssigned"
+
+type noopAssetEventDispatcher struct{}
+
+func (noopAssetEventDispatcher) Dispatch(ctx context.Context, eventName string, targetEmployee string) error {
+	return nil
 }

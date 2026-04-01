@@ -45,6 +45,10 @@ func (c *Client) QueryRow(ctx context.Context, sql string, arguments ...any) int
 	return c.pool.QueryRow(ctx, sql, arguments...)
 }
 
+func (c *Client) Begin(ctx context.Context) (pgx.Tx, error) {
+	return c.pool.Begin(ctx)
+}
+
 func (c *Client) Close() error {
 	c.pool.Close()
 	return nil

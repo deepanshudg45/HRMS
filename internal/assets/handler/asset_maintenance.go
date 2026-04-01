@@ -20,8 +20,13 @@ import (
 type AssetService interface {
 	CreateAsset(ctx context.Context, req model.CreateAssetRequest) (*model.AssetDTO, error)
 	GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error)
+	GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error)
+	UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) (*model.AssetDetailDTO, error)
 	GetMaintenanceRecordsByAssetID(ctx context.Context, assetID string) ([]model.MaintenanceDTO, error)
+	CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error)
+	UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error)
 	DeleteAsset(ctx context.Context, assetID string) error
+	AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error)
 	UpdateAssetStatus(ctx context.Context, assetID string, req model.StatusRequest) (*model.AssetDTO, error)
 	GetActiveAssets(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error)
 	ReturnAsset(ctx context.Context, assetID string, req model.ReturnRequest) (*model.ReturnDTO, error)
@@ -122,6 +127,127 @@ func (h *AssetHandler) GetAssets(c *fiber.Ctx) error {
 	})
 }
 
+func (h *AssetHandler) GetAssetByID(c *fiber.Ctx) error {
+	assetID := c.Params("id")
+	if assetID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "asset id is required",
+		})
+	}
+
+	asset, err := h.service.GetAssetByID(c.Context(), assetID)
+	if err != nil {
+		if errors.Is(err, service.ErrAssetNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"data":    asset,
+	})
+}
+
+func (h *AssetHandler) UpdateAsset(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
+	assetID := c.Params("id")
+	if assetID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "asset id is required",
+		})
+	}
+
+	var req model.UpdateAssetRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	asset, err := h.service.UpdateAsset(c.Context(), assetID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrMissingRequiredFields), errors.Is(err, service.ErrInvalidAssetType):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrAssetNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"data":    asset,
+	})
+}
+
+func (h *AssetHandler) AssignAsset(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
+	assetID := c.Params("id")
+	if assetID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "asset id is required",
+		})
+	}
+
+	var req model.AssignRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	result, err := h.service.AssignAsset(c.Context(), assetID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrEmployeeIDRequired), errors.Is(err, service.ErrAssignedOnRequired), errors.Is(err, service.ErrConditionAtAssignRequired):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrAssetNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrAssetUnavailable):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"data":    result,
+	})
+}
+
 func (h *AssetHandler) GetMaintenanceRecords(c *fiber.Ctx) error {
 	if !middleware.IsHR(c) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -148,6 +274,95 @@ func (h *AssetHandler) GetMaintenanceRecords(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(records)
+}
+
+func (h *AssetHandler) CreateMaintenanceRecord(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
+	assetID := c.Params("id")
+	if assetID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "asset id is required",
+		})
+	}
+
+	var req model.MaintenanceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	record, err := h.service.CreateMaintenanceRecord(c.Context(), assetID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidMaintenanceType), errors.Is(err, service.ErrDescriptionRequired):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrAssetNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrMaintenanceBlocked):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(record)
+}
+
+func (h *AssetHandler) UpdateMaintenanceRecord(c *fiber.Ctx) error {
+	if !middleware.IsHR(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
+	assetID := c.Params("id")
+	maintenanceID := c.Params("maintenanceId")
+	if assetID == "" || maintenanceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "asset id and maintenance id are required",
+		})
+	}
+
+	var req model.UpdateMaintenanceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	record, err := h.service.UpdateMaintenanceRecord(c.Context(), assetID, maintenanceID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidMaintenanceStatus):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrAssetNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(record)
 }
 
 func (h *AssetHandler) DeleteAsset(c *fiber.Ctx) error {

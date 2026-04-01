@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"WITS/internal/assets/model"
@@ -9,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+var ErrAssetUnavailable = errors.New("asset is not available for assignment")
 
 type Row interface {
 	Scan(dest ...any) error
@@ -18,6 +21,7 @@ type DB interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, arguments ...any) interface{ Scan(dest ...any) error }
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 type Repository struct {
@@ -90,6 +94,7 @@ func (r *Repository) GetMaintenanceRecordsByAssetID(ctx context.Context, assetID
             COALESCE(description, ''),
             COALESCE(sent_for_repair_at::text, ''),
             COALESCE(vendor, ''),
+            COALESCE(notes, ''),
             maint_status,
             COALESCE(returned_from_repair_at::text, ''),
             COALESCE(repair_cost_inr, 0),
@@ -117,6 +122,7 @@ func (r *Repository) GetMaintenanceRecordsByAssetID(ctx context.Context, assetID
 			&record.Description,
 			&record.SentForRepairAt,
 			&record.Vendor,
+			&record.Notes,
 			&record.MaintStatus,
 			&record.ReturnedFromRepairAt,
 			&record.RepairCostINR,
@@ -137,6 +143,194 @@ func (r *Repository) GetMaintenanceRecordsByAssetID(ctx context.Context, assetID
 	return records, nil
 }
 
+func (r *Repository) CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	statusQuery := `
+        SELECT status
+        FROM asset_inventory
+        WHERE id = $1 AND is_deleted = FALSE
+        FOR UPDATE
+    `
+
+	var currentStatus string
+	if err := tx.QueryRow(ctx, statusQuery, assetID).Scan(&currentStatus); err != nil {
+		return nil, err
+	}
+
+	if currentStatus == "RETIRED" || currentStatus == "LOST" {
+		return nil, ErrAssetUnavailable
+	}
+
+	insertQuery := `
+        INSERT INTO asset_maintenance_logs (
+            asset_id,
+            maintenance_type,
+            description,
+            sent_for_repair_at,
+            vendor,
+            notes,
+            maint_status
+        )
+        VALUES ($1, $2, $3, NULLIF($4, '')::date, $5, '', 'IN_PROGRESS')
+        RETURNING
+            id,
+            asset_id,
+            maintenance_type,
+            COALESCE(description, ''),
+            COALESCE(sent_for_repair_at::text, ''),
+            COALESCE(vendor, ''),
+            COALESCE(notes, ''),
+            maint_status,
+            COALESCE(returned_from_repair_at::text, ''),
+            COALESCE(repair_cost_inr, 0),
+            created_at::text,
+            updated_at::text
+    `
+
+	var record model.MaintenanceDTO
+	if err := tx.QueryRow(
+		ctx,
+		insertQuery,
+		assetID,
+		req.MaintenanceType,
+		req.Description,
+		req.SentForRepairAt,
+		req.Vendor,
+	).Scan(
+		&record.ID,
+		&record.AssetID,
+		&record.MaintenanceType,
+		&record.Description,
+		&record.SentForRepairAt,
+		&record.Vendor,
+		&record.Notes,
+		&record.MaintStatus,
+		&record.ReturnedFromRepairAt,
+		&record.RepairCostINR,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	updateAssetQuery := `
+        UPDATE asset_inventory
+        SET status = 'UNDER_REPAIR'
+        WHERE id = $1 AND is_deleted = FALSE
+    `
+
+	tag, err := tx.Exec(ctx, updateAssetQuery, assetID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	record.MaintStatus = "IN_PROGRESS"
+	return &record, nil
+}
+
+func (r *Repository) UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	nextAssetStatus := "UNDER_REPAIR"
+	switch req.Status {
+	case "COMPLETED":
+		nextAssetStatus = "AVAILABLE"
+	case "SCRAPPED":
+		nextAssetStatus = "RETIRED"
+	case "IN_PROGRESS":
+		nextAssetStatus = "UNDER_REPAIR"
+	}
+
+	updateMaintenanceQuery := `
+        UPDATE asset_maintenance_logs
+        SET
+            maint_status = $3,
+            returned_from_repair_at = NULLIF($4, '')::date,
+            repair_cost_inr = $5,
+            vendor = $6,
+            notes = $7,
+            updated_at = NOW()
+        WHERE id = $2 AND asset_id = $1
+        RETURNING
+            id,
+            asset_id,
+            maintenance_type,
+            COALESCE(description, ''),
+            COALESCE(sent_for_repair_at::text, ''),
+            COALESCE(vendor, ''),
+            COALESCE(notes, ''),
+            maint_status,
+            COALESCE(returned_from_repair_at::text, ''),
+            COALESCE(repair_cost_inr, 0),
+            created_at::text,
+            updated_at::text
+    `
+
+	var record model.MaintenanceDTO
+	if err := tx.QueryRow(
+		ctx,
+		updateMaintenanceQuery,
+		assetID,
+		maintenanceID,
+		req.Status,
+		req.ReturnedFromRepairAt,
+		req.RepairCostINR,
+		req.Vendor,
+		req.Notes,
+	).Scan(
+		&record.ID,
+		&record.AssetID,
+		&record.MaintenanceType,
+		&record.Description,
+		&record.SentForRepairAt,
+		&record.Vendor,
+		&record.Notes,
+		&record.MaintStatus,
+		&record.ReturnedFromRepairAt,
+		&record.RepairCostINR,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	updateAssetQuery := `
+        UPDATE asset_inventory
+        SET status = $2
+        WHERE id = $1 AND is_deleted = FALSE
+    `
+
+	tag, err := tx.Exec(ctx, updateAssetQuery, assetID, nextAssetStatus)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
 func (r *Repository) GetAssetStatusByID(ctx context.Context, assetID string) (string, error) {
 	query := `
         SELECT status
@@ -151,6 +345,51 @@ func (r *Repository) GetAssetStatusByID(ctx context.Context, assetID string) (st
 	}
 
 	return status, nil
+}
+
+func (r *Repository) UpdateAsset(ctx context.Context, assetID string, asset model.Asset) error {
+	query := `
+        UPDATE asset_inventory
+        SET
+            asset_type = $2,
+            name = $3,
+            brand = $4,
+            model = $5,
+            category = $6,
+            serial_no = $7,
+            purchase_date = NULLIF($8, '')::date,
+            purchase_cost_inr = $9,
+            vendor = $10,
+            warranty_expiry = NULLIF($11, '')::date,
+            location = $12,
+            notes = $13
+        WHERE id = $1 AND is_deleted = FALSE
+    `
+
+	tag, err := r.DB.Exec(ctx, query,
+		assetID,
+		asset.AssetType,
+		asset.AssetName,
+		asset.Brand,
+		asset.Model,
+		asset.AssetCategory,
+		asset.SerialNo,
+		asset.PurchaseDate,
+		asset.PurchaseCostINR,
+		asset.Vendor,
+		asset.WarrantyExpiry,
+		asset.Location,
+		asset.Notes,
+	)
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+
+	return nil
 }
 
 func (r *Repository) SoftDeleteAsset(ctx context.Context, assetID string) error {
@@ -253,6 +492,86 @@ func (r *Repository) GetActiveAssignmentIDByAssetID(ctx context.Context, assetID
 	return assignmentID, nil
 }
 
+func (r *Repository) AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	statusQuery := `
+        SELECT status
+        FROM asset_inventory
+        WHERE id = $1 AND is_deleted = FALSE
+        FOR UPDATE
+    `
+
+	var currentStatus string
+	if err := tx.QueryRow(ctx, statusQuery, assetID).Scan(&currentStatus); err != nil {
+		return nil, err
+	}
+
+	if currentStatus != "AVAILABLE" {
+		return nil, ErrAssetUnavailable
+	}
+
+	insertQuery := `
+        INSERT INTO asset_assignments (
+            asset_id,
+            assigned_to,
+            assigned_on,
+            condition_at_assignment,
+            notes,
+            is_active,
+            acknowledgement_status
+        )
+        VALUES ($1, $2, NULLIF($3, '')::timestamp, $4, $5, TRUE, 'PENDING')
+        RETURNING id
+    `
+
+	var assignmentID string
+	if err := tx.QueryRow(
+		ctx,
+		insertQuery,
+		assetID,
+		req.EmployeeID,
+		req.AssignedOn,
+		req.ConditionAtAssignment,
+		req.Notes,
+	).Scan(&assignmentID); err != nil {
+		return nil, err
+	}
+
+	updateAssetQuery := `
+        UPDATE asset_inventory
+        SET status = 'ASSIGNED'
+        WHERE id = $1 AND is_deleted = FALSE
+    `
+
+	tag, err := tx.Exec(ctx, updateAssetQuery, assetID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &model.AssignAssetDTO{
+		ID:                    assignmentID,
+		AssetID:               assetID,
+		EmployeeID:            req.EmployeeID,
+		AssignedOn:            req.AssignedOn,
+		ConditionAtAssignment: req.ConditionAtAssignment,
+		Notes:                 req.Notes,
+		AcknowledgementStatus: "PENDING",
+		AssetStatus:           "ASSIGNED",
+	}, nil
+}
+
 func (r *Repository) DeactivateAssignment(ctx context.Context, assignmentID string) error {
 	query := `
         UPDATE asset_assignments
@@ -287,10 +606,13 @@ func (r *Repository) GetAssignmentsByAssetID(ctx context.Context, assetID string
             asset_id,
             assigned_to,
             is_active,
-            created_at
+            COALESCE(assigned_on::text, created_at::text),
+            COALESCE(condition_at_assignment, ''),
+            COALESCE(notes, ''),
+            COALESCE(acknowledgement_status, '')
         FROM asset_assignments
         WHERE asset_id = $1
-        ORDER BY created_at DESC
+        ORDER BY COALESCE(assigned_on, created_at) DESC
     `
 
 	rows, err := r.DB.Query(ctx, query, assetID)
@@ -308,6 +630,9 @@ func (r *Repository) GetAssignmentsByAssetID(ctx context.Context, assetID string
 			&assignment.EmployeeID,
 			&assignment.IsActive,
 			&assignment.AssignedOn,
+			&assignment.ConditionAtAssignment,
+			&assignment.Notes,
+			&assignment.AcknowledgementStatus,
 		); err != nil {
 			return nil, err
 		}
