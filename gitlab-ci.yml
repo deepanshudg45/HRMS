@@ -1,0 +1,44 @@
+image: golang:1.26.1
+
+stages:
+  - install
+  - build
+  - test
+  - deploy
+
+variables:
+  GO111MODULE: "on"
+
+cache:
+  paths:
+    - /go/pkg/mod
+    - .cache/go-build
+
+before_script:
+  - go version
+
+install:
+  stage: install
+  script:
+    - echo "Installing project dependencies"
+    - go mod download
+
+build:
+  stage: build
+  script:
+    - echo "Building backend application"
+    - go build -v ./...
+
+test:
+  stage: test
+  script:
+    - echo "Running tests"
+    - go test -v ./...
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploy step"
+    - echo "In real project you would deploy to a server or cloud platform."
+  only:
+    - main

@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+server.exe
+migrate.exe
+Dockerfile
+README.md
+tmp
+dist
+bin
