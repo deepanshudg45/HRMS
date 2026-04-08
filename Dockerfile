@@ -20,7 +20,7 @@ COPY --from=builder /bin/server /app/server
 COPY --from=builder /bin/migrate /app/migrate
 COPY migration /app/migration
 
-ENV APP_PORT=3000
+# ENV APP_PORT=3000
 
 EXPOSE 3000
 

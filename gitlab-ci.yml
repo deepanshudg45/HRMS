@@ -2,12 +2,14 @@ image: golang:1.26.1
 
 stages:
   - install
-  - build
   - test
+  - push
   - deploy
 
 variables:
   GO111MODULE: "on"
+  CGO_ENABLED: "0"
+  GOFLAGS: "-mod=readonly"
 
 cache:
   paths:
@@ -17,28 +19,57 @@ cache:
 before_script:
   - go version
 
+# INSTALLING DEPENDENCIES
 install:
   stage: install
   script:
-    - echo "Installing project dependencies"
+    - echo "Installing dependencies"
     - go mod download
 
-build:
-  stage: build
-  script:
-    - echo "Building backend application"
-    - go build -v ./...
-
+# TESTING
 test:
   stage: test
   script:
     - echo "Running tests"
     - go test -v ./...
 
+# DOCKER BUILD and PUSH
+push:
+  stage: push
+  image: docker:27.3.1
+  services:
+    - docker:27.3.1-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - echo "Login to registry"
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+    - echo "Pulling latest image for cache"
+    - docker pull "$CI_REGISTRY_IMAGE:latest" || true
+
+    - echo "Building Docker image"
+    - docker build \
+        --cache-from="$CI_REGISTRY_IMAGE:latest" \
+        -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" \
+        -t "$CI_REGISTRY_IMAGE:latest" \
+        .
+
+    - echo "Pushing images"
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:latest"
+
+  rules:
+    - if: '$CI_REGISTRY_IMAGE'
+      when: on_success
+    - when: never
+
+# DEPLOY (DUMMY)
 deploy:
   stage: deploy
   script:
-    - echo "Deploy step"
-    - echo "In real project you would deploy to a server or cloud platform."
-  only:
-    - main
+    - echo "Deploying backend..."
+    # here actual deploy commands when deploying to server (ssh, kubectl, etc.)
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
