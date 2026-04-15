@@ -240,10 +240,10 @@ func (r *Repository) UpdateAsset(ctx context.Context, assetID string, req model.
 	return nil
 }
 
-func (r *Repository) SoftDeleteAsset(ctx context.Context, assetID string) error {
+
+func (r *Repository) DeleteAsset(ctx context.Context, assetID string) error {
 	query := `
-        UPDATE asset_inventory
-        SET is_deleted = TRUE
+        DELETE FROM asset_inventory
         WHERE id = $1 AND is_deleted = FALSE
     `
 

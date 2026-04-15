@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -121,10 +122,13 @@ func (s *AssetService) DeleteAsset(ctx context.Context, assetID string) error {
 	}
 
 	if status != "AVAILABLE" && status != "RETIRED" {
-		return errors.New("asset is in use")
+		return &model.AppError{
+			Status:  http.StatusConflict,
+			Message: "asset is in use",
+		}
 	}
 
-	return s.repo.SoftDeleteAsset(ctx, assetID)
+	return s.repo.DeleteAsset(ctx, assetID)
 }
 
 func (s *AssetService) UpdateAssetStatus(ctx context.Context, assetID string, req model.StatusRequest) (*model.AssetDTO, error) {

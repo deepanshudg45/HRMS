@@ -16,6 +16,15 @@ type Asset struct {
 	Notes           string  `json:"notes"`
 }
 
+type AppError struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
+
+func (e *AppError) Error() string {
+	return e.Message
+}
+
 type CreateAssetRequest struct {
 	AssetType       string  `json:"assetType"`
 	AssetName       string  `json:"assetName"`

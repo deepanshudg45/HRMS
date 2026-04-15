@@ -10,8 +10,10 @@ import (
 	"WITS/internal/assets/routes"
 	"WITS/internal/assets/service"
 	"WITS/package/database"
+	"WITS/package/migration"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 )
@@ -27,7 +29,14 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := migration.Run(context.Background(), db, "migration"); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("migrations completed successfully")
+
 	app := fiber.New()
+	app.Use(cors.New())
 
 	assetRepo := repository.NewRepository(db)
 	assetService := service.NewAssetService(assetRepo)

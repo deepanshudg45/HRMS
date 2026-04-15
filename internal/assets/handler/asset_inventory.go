@@ -160,12 +160,21 @@ func (h *AssetHandler) DeleteAsset(c *fiber.Ctx) error {
 
 	err := h.service.DeleteAsset(c.Context(), assetID)
 	if err != nil {
+		var appErr *model.AppError
+		if errors.As(err, &appErr) {
+			return c.Status(appErr.Status).JSON(fiber.Map{
+				"error": appErr.Message,
+			})
+		}
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "unable to delete asset",
 		})
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+	})
 }
 
 func (h *AssetHandler) UpdateAssetStatus(c *fiber.Ctx) error {

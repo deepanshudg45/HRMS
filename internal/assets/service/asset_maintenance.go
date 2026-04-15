@@ -19,7 +19,7 @@ type AssetRepository interface {
 	UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error)
 	GetAssetStatusByID(ctx context.Context, assetID string) (string, error)
 	AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error)
-	SoftDeleteAsset(ctx context.Context, assetID string) error
+	DeleteAsset(ctx context.Context, assetID string) error
 	UpdateAssetStatus(ctx context.Context, assetID string, status string) (*model.AssetDTO, error)
 	GetActiveAssetsByEmployeeID(ctx context.Context, employeeID string) ([]model.MyAssetDTO, error)
 	GetActiveAssignmentIDByAssetID(ctx context.Context, assetID string) (string, error)

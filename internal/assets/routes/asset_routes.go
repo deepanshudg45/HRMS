@@ -11,7 +11,7 @@ func AssetRoutes(app *fiber.App, handler *handler.AssetHandler) {
 
 	asset.Get("/assets", handler.GetAssets)
 	asset.Post("/assets", handler.CreateAsset)
-	asset.Get("/assets/:id", handler.GetAssetByID)
+	// asset.Get("/assets/:id", handler.GetAssetByID)
 	asset.Put("/assets/:id", handler.UpdateAsset)
 	asset.Delete("/assets/:id", handler.DeleteAsset)
 	asset.Post("/assets/:id/assign", handler.AssignAsset)

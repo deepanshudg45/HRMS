@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"WITS/internal/assets/model"
+
+	"github.com/google/uuid"
 )
 
 func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req model.AssignRequest) (*model.AssignAssetDTO, error) {
@@ -21,6 +23,10 @@ func (s *AssetService) AssignAsset(ctx context.Context, assetID string, req mode
 
 	if req.EmployeeID == "" {
 		return nil, errors.New("employee id is required")
+	}
+	_, err := uuid.Parse(req.EmployeeID)
+	if err != nil {
+		return nil, errors.New("invalid employee id format")
 	}
 	if req.AssignedOn == "" {
 		return nil, errors.New("assignedOn is required")
@@ -47,7 +53,17 @@ func (s *AssetService) GetActiveAssets(ctx context.Context, employeeID string) (
 		return nil, errors.New("employee id is required")
 	}
 
-	return s.repo.GetActiveAssetsByEmployeeID(ctx, employeeID)
+	assets, err := s.repo.GetActiveAssetsByEmployeeID(ctx, employeeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Debug: return empty array if no assets found
+	if len(assets) == 0 {
+		return []model.MyAssetDTO{}, nil
+	}
+
+	return assets, nil
 }
 
 func (s *AssetService) ReturnAsset(ctx context.Context, assetID string, req model.ReturnRequest) (*model.ReturnDTO, error) {

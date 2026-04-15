@@ -14,13 +14,15 @@ func (r *Repository) GetActiveAssetsByEmployeeID(ctx context.Context, employeeID
             ai.asset_code,
             ai.asset_type,
             ai.name,
-            aa.created_at
+            aa.assigned_on,
+            aa.acknowledgement_status,
+            aa.condition_at_assignment
         FROM asset_assignments aa
         JOIN asset_inventory ai ON ai.id = aa.asset_id
         WHERE aa.assigned_to = $1
           AND aa.is_active = TRUE
           AND ai.is_deleted = FALSE
-        ORDER BY aa.created_at DESC
+        ORDER BY aa.assigned_on DESC
     `
 
 	rows, err := r.DB.Query(ctx, query, employeeID)
@@ -37,6 +39,8 @@ func (r *Repository) GetActiveAssetsByEmployeeID(ctx context.Context, employeeID
 			&asset.AssetType,
 			&asset.AssetName,
 			&asset.AssignedOn,
+			&asset.AcknowledgementStatus,
+			&asset.ConditionAtAssignment,
 		); err != nil {
 			return nil, err
 		}

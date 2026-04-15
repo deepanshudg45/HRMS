@@ -27,11 +27,10 @@ func (h *AssetHandler) AssignAsset(c *fiber.Ctx) error {
 			"error": err.Error(),
 		})
 	}
-
 	result, err := h.service.AssignAsset(c.Context(), assetID, req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "unable to assign asset",
+			"error": err.Error(),
 		})
 	}
 
@@ -44,6 +43,12 @@ func (h *AssetHandler) AssignAsset(c *fiber.Ctx) error {
 func (h *AssetHandler) GetActiveAssets(c *fiber.Ctx) error {
 	employeeID := middleware.CurrentEmployeeID(c)
 
+	if employeeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "employee id is required",
+		})
+	}
+
 	assets, err := h.service.GetActiveAssets(c.Context(), employeeID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -55,7 +60,11 @@ func (h *AssetHandler) GetActiveAssets(c *fiber.Ctx) error {
 		assets = []model.MyAssetDTO{}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(assets)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"data":    assets,
+		"count":   len(assets),
+	})
 }
 
 func (h *AssetHandler) ReturnAsset(c *fiber.Ctx) error {
