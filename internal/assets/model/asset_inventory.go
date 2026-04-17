@@ -1,5 +1,7 @@
 package model
 
+import "github.com/google/uuid"
+
 type Asset struct {
 	AssetCode       string  `json:"assetCode"`
 	AssetType       string  `json:"assetType"`
@@ -66,7 +68,10 @@ type AssetListDTO struct {
 }
 
 type EmployeeSummaryDTO struct {
-	EmployeeID string `json:"employeeId"`
+	EmployeeID   string `json:"employeeId"`
+	Name         string `json:"name,omitempty"`
+	EmployeeCode string `json:"employeeCode,omitempty"`
+	AssignedOn   string `json:"assignedOn,omitempty"`
 }
 
 type AssetDetailDTO struct {
@@ -86,7 +91,7 @@ type AssetDetailDTO struct {
 	Location        string              `json:"location"`
 	Notes           string              `json:"notes"`
 	CurrentAssignee *EmployeeSummaryDTO `json:"currentAssignee,omitempty"`
-	AssignmentID    *string             `json:"assignmentId,omitempty"`
+	AssignmentID    *uuid.UUID          `json:"assignmentId,omitempty"`
 }
 
 type AssetReportDTO struct {
@@ -121,9 +126,9 @@ type ResponseMeta struct {
 }
 
 type StandardResponse struct {
-	Success bool         `json:"success"`
-	Data    any          `json:"data,omitempty"`
-	Message string       `json:"message,omitempty"`
+	Success bool          `json:"success"`
+	Data    any           `json:"data,omitempty"`
+	Message string        `json:"message,omitempty"`
 	Meta    *ResponseMeta `json:"meta,omitempty"`
 }
 

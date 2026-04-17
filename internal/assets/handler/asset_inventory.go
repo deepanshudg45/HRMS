@@ -111,7 +111,21 @@ func (h *AssetHandler) GetAssetByID(c *fiber.Ctx) error {
 }
 
 func (h *AssetHandler) UpdateAsset(c *fiber.Ctx) error {
-	if !middleware.IsHR(c) {
+	employeeID := middleware.CurrentEmployeeID(c)
+	if employeeID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "employee id is required",
+		})
+	}
+
+	isHR, err := h.service.IsHREmployee(c.Context(), employeeID)
+	if err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "forbidden",
+		})
+	}
+
+	if !isHR {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "forbidden",
 		})

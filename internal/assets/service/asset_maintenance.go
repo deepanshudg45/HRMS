@@ -13,6 +13,7 @@ type AssetRepository interface {
 	CreateAsset(ctx context.Context, asset model.Asset) error
 	GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error)
 	GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error)
+	IsHREmployee(ctx context.Context, employeeID string) (bool, error)
 	UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) error
 	GetMaintenanceRecordsByAssetID(ctx context.Context, assetID string) ([]model.MaintenanceDTO, error)
 	CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error)

@@ -7,6 +7,7 @@ import (
 
 	"WITS/internal/assets/model"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -146,16 +147,24 @@ func (r *Repository) GetAssetByID(ctx context.Context, assetID string) (*model.A
             COALESCE(ai.location, ''),
             COALESCE(ai.notes, ''),
             a.id::text,
-            a.assigned_to::text
+            a.assigned_to::text,
+            COALESCE(e.name, ''),
+            COALESCE(e.employee_code, ''),
+            COALESCE(a.assigned_on::text, '')
         FROM asset_inventory ai
         LEFT JOIN asset_assignments a
             ON a.asset_id = ai.id AND a.is_active = TRUE
+        LEFT JOIN employees e
+            ON e.id = a.assigned_to
         WHERE ai.id = $1 AND ai.is_deleted = FALSE
     `
 
 	var detail model.AssetDetailDTO
 	var assignmentID sql.NullString
 	var employeeID sql.NullString
+	var employeeName string
+	var employeeCode string
+	var assignedOn string
 
 	err := r.DB.QueryRow(ctx, query, assetID).Scan(
 		&detail.ID,
@@ -175,18 +184,28 @@ func (r *Repository) GetAssetByID(ctx context.Context, assetID string) (*model.A
 		&detail.Notes,
 		&assignmentID,
 		&employeeID,
+		&employeeName,
+		&employeeCode,
+		&assignedOn,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	if assignmentID.Valid {
-		detail.AssignmentID = &assignmentID.String
+		parsedID, err := uuid.Parse(assignmentID.String)
+		if err != nil {
+			return nil, err
+		}
+		detail.AssignmentID = &parsedID
 	}
 
 	if employeeID.Valid {
 		detail.CurrentAssignee = &model.EmployeeSummaryDTO{
-			EmployeeID: employeeID.String,
+			EmployeeID:   employeeID.String,
+			Name:         employeeName,
+			EmployeeCode: employeeCode,
+			AssignedOn:   assignedOn,
 		}
 	}
 
@@ -207,6 +226,25 @@ func (r *Repository) GetAssetStatusByID(ctx context.Context, assetID string) (st
 	}
 
 	return status, nil
+}
+
+func (r *Repository) IsHREmployee(ctx context.Context, employeeID string) (bool, error) {
+	query := `
+        SELECT EXISTS (
+            SELECT 1
+            FROM employees
+            WHERE id = $1
+              AND UPPER(COALESCE(role, '')) = 'HR'
+        )
+    `
+
+	var isHR bool
+	err := r.DB.QueryRow(ctx, query, employeeID).Scan(&isHR)
+	if err != nil {
+		return false, err
+	}
+
+	return isHR, nil
 }
 
 func (r *Repository) UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) error {
@@ -239,7 +277,6 @@ func (r *Repository) UpdateAsset(ctx context.Context, assetID string, req model.
 
 	return nil
 }
-
 
 func (r *Repository) DeleteAsset(ctx context.Context, assetID string) error {
 	query := `

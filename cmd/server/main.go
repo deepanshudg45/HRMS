@@ -9,6 +9,8 @@ import (
 	"WITS/internal/assets/repository"
 	"WITS/internal/assets/routes"
 	"WITS/internal/assets/service"
+	authHandlerPkg "WITS/internal/auth/handler"
+	authRoutes "WITS/internal/auth/routes"
 	"WITS/package/database"
 	"WITS/package/migration"
 
@@ -38,10 +40,12 @@ func main() {
 	app := fiber.New()
 	app.Use(cors.New())
 
+	authHandler := authHandlerPkg.NewAuthHandler(cfg.JWTSecret)
 	assetRepo := repository.NewRepository(db)
 	assetService := service.NewAssetService(assetRepo)
 	assetHandler := handler.NewAssetHandler(assetService)
 
+	authRoutes.AuthRoutes(app, authHandler)
 	routes.AssetRoutes(app, assetHandler)
 
 	warrantyCron := cron.New()

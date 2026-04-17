@@ -14,6 +14,7 @@ type AssetService interface {
 	GetAssets(ctx context.Context, filters *model.AssetFilter) ([]model.AssetListDTO, int, error)
 	GetAssetByID(ctx context.Context, assetID string) (*model.AssetDetailDTO, error)
 	UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) (*model.AssetDTO, error)
+	IsHREmployee(ctx context.Context, employeeID string) (bool, error)
 	GetMaintenanceRecordsByAssetID(ctx context.Context, assetID string) ([]model.MaintenanceDTO, error)
 	CreateMaintenanceRecord(ctx context.Context, assetID string, req model.MaintenanceRequest) (*model.MaintenanceDTO, error)
 	UpdateMaintenanceRecord(ctx context.Context, assetID string, maintenanceID string, req model.UpdateMaintenanceRequest) (*model.MaintenanceDTO, error)

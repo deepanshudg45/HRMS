@@ -77,6 +77,15 @@ func (s *AssetService) GetAssetByID(ctx context.Context, assetID string) (*model
 	return s.repo.GetAssetByID(ctx, assetID)
 }
 
+func (s *AssetService) IsHREmployee(ctx context.Context, employeeID string) (bool, error) {
+	employeeID = strings.TrimSpace(employeeID)
+	if employeeID == "" {
+		return false, errors.New("employee id is required")
+	}
+
+	return s.repo.IsHREmployee(ctx, employeeID)
+}
+
 func (s *AssetService) UpdateAsset(ctx context.Context, assetID string, req model.UpdateAssetRequest) (*model.AssetDTO, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
